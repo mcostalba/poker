@@ -57,8 +57,9 @@ uint64_t next(void) {
 void init() {
     srand(time(NULL));
     s[0] = rand(); // Initialize random seed
-    s[1] = next();
-    s[0] = next();
+    s[1] = rand();
+    s[0] = (s[0] << 32) ^ rand();
+    s[1] = (s[1] << 32) ^ rand();
 }
 
 
