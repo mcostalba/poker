@@ -5,20 +5,6 @@
 
 const std::string pretty_hand(uint64_t b, bool value);
 
-std::ostream &operator<<(std::ostream &os, Card c) {
-  if (c % 16 < INVALID)
-    os << "23456789TJQKA"[c % 16] << "dhcs"[c / 16] << " ";
-  else
-    os << "-- ";
-  return os;
-}
-
-std::ostream &operator<<(std::ostream &os, Card64 cs) {
-  for (unsigned i = 0; i <= 64 - 6; i += 6)
-    os << Card((cs >> i) & 0x3F);
-  return os;
-}
-
 std::ostream &operator<<(std::ostream &os, Flags f) {
   if (f & SFlushF)
       os << "SF ";
@@ -39,44 +25,60 @@ std::ostream &operator<<(std::ostream &os, Flags f) {
   return os;
 }
 
+std::ostream &operator<<(std::ostream &os, Card c) {
+  if (c % 16 < INVALID)
+    os << "23456789TJQKA"[c % 16] << "dhcs"[c / 16] << " ";
+  else
+    os << "-- ";
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const Hand& h) {
+
+  uint64_t v = h.colors;
+
+  os << "Cards: ";
+  while (v)
+      os << Card(pop_lsb(&v));
+
+  os << "\nFlags: " << Flags(h.flags) << "\n"
+     << pretty_hand(h.colors, false) << "\n"
+     << pretty_hand(h.score, true)   << "\n";
+
+  return os;
+}
+
 void test() {
 
-  static const int Limit = 7;
-
   PRNG::init();
-  Hand hands[10 * 1000];
   int hit = 0;
 
-  for (int i = 0; i < 1000; i++) {
-      for (auto &h : hands) {
+  const size_t Players = 5;
+  int results[Players] = {};
 
-          h = Hand();
-          int cnt = 0;
+  Spot s(Players);
 
-          while (cnt < Limit) {
+  for (int i = 0; i < 4 * 1000 * 1000; i++) {
 
-              Card64 c = Card64(PRNG::next()); // Cards are pseudo-legal
+      s.run(results);
 
-              //std::cout << c << "\n";
+//      const Hand& h = s.get(w);
+//      if ((h.flags & QuadF) && (h.score & (1ULL << (12 + 48)))) {
 
-              h.add<Limit>(c, cnt);
-          }
+      if (0) {
 
-          h.do_score();
+    //      std::cout << "\n\nWinner is player: " << w+1 << std::endl;
 
-          if ((h.flags & QuadF) && (h.score & (1ULL << (12 + 48)))) {
+          for (size_t p = 0; p < Players; p++)
+              std::cout << "\nPlayer " << p+1 << ":\n\n" << s.get(p) << std::endl;
 
-              std::cout << Flags(h.flags) << "\n";
-
-              std::cout << pretty_hand(h.values, true) << "\n"
-                        << pretty_hand(h.colors, false) << "\n"
-                        << pretty_hand(h.score, true) << "\n";
-
-              if (++hit == 20)
-                  exit(0);
-          }
+          if (++hit == 4)
+              break;
       }
   }
 
+  std::cout << "\nResults per player: ";
+  for (size_t p = 0; p < Players; p++)
+      std::cout << results[p] << " ";
   std::cout << std::endl;
 }

@@ -95,6 +95,13 @@ inline unsigned long msb(uint64_t b) {
 
 #endif
 
+/// pop_lsb() finds and clears the least significant bit in a non-zero bitboard
+
+inline unsigned pop_lsb(uint64_t* b) {
+  const unsigned s = lsb(*b);
+  *b &= *b - 1;
+  return s;
+}
 
 inline uint64_t msb_bb(uint64_t b) {
   return 1ULL << msb(b);

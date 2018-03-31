@@ -43,7 +43,12 @@ struct Hand {
   uint64_t score;  // Only the 5 best cards, used to compare hands
   uint32_t flags;  // One flag for each combination
 
-  int add(Card c) {
+  bool operator<(const Hand& h) const {
+    return flags != h.flags ? flags < h.flags
+                            : score < h.score;
+  }
+
+  unsigned add(Card c) {
 
     if ((c & 0xF) >= INVALID)
       return 0;
@@ -62,7 +67,7 @@ struct Hand {
     }
   }
 
-  template <int Limit> int add(Card64 cs, int &cnt) {
+  template <int Limit> size_t add(Card64 cs, size_t& cnt) {
     for (unsigned i = 0; cnt < Limit && i <= 64 - 6; i += 6)
       cnt += add(Card((cs >> i) & 0x3F));
     return cnt;
@@ -152,6 +157,52 @@ struct Hand {
         v &= v - 1;
 
     score |= v;
+  }
+
+};
+
+class Spot {
+
+  Hand hands[9];
+  const size_t numPlayers;
+
+public:
+  explicit Spot(size_t n) : numPlayers(n) {}
+
+  void run(int results[]) {
+
+    Hand common = Hand();
+    uint64_t maxScore = 0;
+    size_t cnt = 0;
+
+    do
+        common.add<5>(Card64(PRNG::next()), cnt);
+    while (cnt < 5);
+
+    for (size_t i = 0; i < numPlayers ; ++i) {
+        hands[i] = common;
+
+        do {
+            cnt = 0;
+            hands[i].add<2>(Card64(PRNG::next()), cnt);
+        } while (cnt < 2);
+
+        hands[i].do_score();
+
+        if (maxScore < hands[i].score)
+            maxScore = hands[i].score;
+    }
+
+    // Credit the winner, considering split results
+    for (size_t i = 0; i < numPlayers ; ++i) {
+        if (hands[i].score == maxScore)
+            results[i]++;
+    }
+  }
+
+  const Hand& get(size_t idx) const {
+    assert(idx < numPlayers);
+    return hands[idx];
   }
 
 };
