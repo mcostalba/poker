@@ -4,6 +4,21 @@
 
 #include <cassert>
 #include <cstdint>
+#include <string>
+
+const std::string pretty_hand(uint64_t b, bool value);
+
+namespace PRNG {
+
+void init(uint64_t = 0);
+uint64_t next();
+
+} // namespace PRNG
+
+
+/// bench() runs a benchmark for speed and signature
+void bench();
+
 
 /// popcount() counts the number of non-zero bits in a uint64_t
 

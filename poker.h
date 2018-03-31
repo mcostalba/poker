@@ -3,19 +3,10 @@
 #define POKER_H_INCLUDED
 
 #include <cstdint>
-
-#include "util.h"
-
 #include <iostream>
 #include <string>
-const std::string pretty_hand(uint64_t b, bool value);
 
-namespace PRNG {
-
-void init();
-uint64_t next();
-
-} // namespace PRNG
+#include "util.h"
 
 enum Card : unsigned { INVALID = 13 };
 enum Card64 : uint64_t {}; // 6 bit per card [1..53..64], 10 cards set
@@ -169,7 +160,7 @@ class Spot {
 public:
   explicit Spot(size_t n) : numPlayers(n) {}
 
-  void run(int results[]) {
+  void run(unsigned results[]) {
 
     Hand common = Hand();
     uint64_t maxScore = 0;

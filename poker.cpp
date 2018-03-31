@@ -47,38 +47,3 @@ std::ostream &operator<<(std::ostream &os, const Hand& h) {
 
   return os;
 }
-
-void test() {
-
-  PRNG::init();
-  int hit = 0;
-
-  const size_t Players = 5;
-  int results[Players] = {};
-
-  Spot s(Players);
-
-  for (int i = 0; i < 4 * 1000 * 1000; i++) {
-
-      s.run(results);
-
-//      const Hand& h = s.get(w);
-//      if ((h.flags & QuadF) && (h.score & (1ULL << (12 + 48)))) {
-
-      if (0) {
-
-    //      std::cout << "\n\nWinner is player: " << w+1 << std::endl;
-
-          for (size_t p = 0; p < Players; p++)
-              std::cout << "\nPlayer " << p+1 << ":\n\n" << s.get(p) << std::endl;
-
-          if (++hit == 4)
-              break;
-      }
-  }
-
-  std::cout << "\nResults per player: ";
-  for (size_t p = 0; p < Players; p++)
-      std::cout << results[p] << " ";
-  std::cout << std::endl;
-}

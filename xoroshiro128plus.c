@@ -54,12 +54,16 @@ uint64_t next(void) {
     return result;
 }
 
-void init() {
+void init(uint64_t seed) {
     srand(time(NULL));
     s[0] = rand(); // Initialize random seed
     s[1] = rand();
     s[0] = (s[0] << 32) ^ rand();
     s[1] = (s[1] << 32) ^ rand();
+
+    // Overwrite if seed is provided
+    if (seed)
+        s[0] = seed, s[1] = 0;
 }
 
 

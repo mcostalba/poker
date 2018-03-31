@@ -1,11 +1,11 @@
 
-#include <iostream>
+#include "util.h"
 
 void test();
 
 int main(int , char** ) {
 
-  test();
+  bench();
 
   return 0;
 }
