@@ -14,22 +14,23 @@ static inline TimePoint now() {
         (std::chrono::steady_clock::now().time_since_epoch()).count();
 }
 
-const std::string pretty_hand(uint64_t b, bool value) {
+const std::string pretty_hand(uint64_t b, bool headers) {
 
   std::string s = "\n";
+  std::string hstr = headers ? "\n" : "---+---+---+\n";
 
-  if (value)
+  if (headers)
     s += "    | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | T | J | Q | K | A \n";
 
-  s += "    +---+---+---+---+---+---+---+---+---+---+---+---+---+\n";
+  s += "    +---+---+---+---+---+---+---+---+---+---+---+---+---+" + hstr;
 
   for (int r = 3; r >= 0; --r) {
-    s += value ? std::string("    ") : std::string("   ") + "dhcs"[r];
+    s += headers ? std::string("   ") + "dhcs"[r] : std::string("    ");
 
-    for (int f = 0; f < 13; ++f)
+    for (int f = 0; f < (headers ? 13 : 16); ++f)
       s += b & (1ULL << ((r * 16) + f)) ? "| X " : "|   ";
 
-    s += "|\n    +---+---+---+---+---+---+---+---+---+---+---+---+---+\n";
+    s += "|\n    +---+---+---+---+---+---+---+---+---+---+---+---+---+" + hstr;
   }
 
   return s;
@@ -54,7 +55,7 @@ struct Hash {
 void bench() {
 
   const int NumGames = 1500 * 1000;
-  const uint64_t GoodSig = 12525851480546818074ULL;
+  const uint64_t GoodSig = 12289633340404457000ULL;
 
   PRNG::init(0x4209920184674cbfULL);
 

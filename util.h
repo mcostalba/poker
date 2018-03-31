@@ -6,7 +6,7 @@
 #include <cstdint>
 #include <string>
 
-const std::string pretty_hand(uint64_t b, bool value);
+extern const std::string pretty_hand(uint64_t b, bool headers);
 
 namespace PRNG {
 

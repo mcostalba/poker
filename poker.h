@@ -22,6 +22,16 @@ enum Flags {
   PairF     = 1 << 0
 };
 
+// Alter score according to combination tye. Needed only for few cases, when
+// native score value is not enough. We use the last 3 unused bits of quad and
+// set rows in values.
+enum FlagScores : uint64_t {
+  SFlushS   = 1ULL << (16 * 3 + 15),
+  FullHS    = 1ULL << (16 * 2 + 15),
+  FlushS    = 1ULL << (16 * 2 + 14),
+  StraightS = 1ULL << (16 * 2 + 13)
+};
+
 constexpr uint64_t Rank1BB = 0xFFFFULL << (16 * 0);
 constexpr uint64_t Rank2BB = 0xFFFFULL << (16 * 1);
 constexpr uint64_t Rank3BB = 0xFFFFULL << (16 * 2);
@@ -33,11 +43,6 @@ struct Hand {
   uint64_t colors; // 16bit for each color
   uint64_t score;  // Only the 5 best cards, used to compare hands
   uint32_t flags;  // One flag for each combination
-
-  bool operator<(const Hand& h) const {
-    return flags != h.flags ? flags < h.flags
-                            : score < h.score;
-  }
 
   unsigned add(Card c) {
 
@@ -117,10 +122,10 @@ struct Hand {
     // is_flush() and is_straight() map values into Rank1BB, so all the other
     // checks on ranks above the first are always false.
     if (is_flush())
-        flags |= FlushF;
+        flags |= FlushF, score |= FlushS;
 
     if (is_straight())
-        flags |= StraightF;
+        flags |= StraightF, score |= StraightS;
 
     // We can't have quad and straight or flush at the same time
     if ((v = (values & Rank4BB)) != 0 && cnt >= 4)
@@ -136,10 +141,10 @@ struct Hand {
       flags |= DPairF, v = msb_bb(v), score |= v, drop<2>(v), cnt -= 2;
 
     if ((flags & (FlushF | StraightF)) == (FlushF | StraightF))
-      flags |= SFlushF;
+      flags |= SFlushF, score |= SFlushS;
 
     if ((flags & (SetF | PairF)) == (SetF | PairF))
-      flags |= FullHF;
+      flags |= FullHF, score |= FullHS;
 
     // Pick the highest 5 only
     v = values & Rank1BB;
@@ -151,6 +156,8 @@ struct Hand {
   }
 
 };
+
+std::ostream &operator<<(std::ostream &os, const Hand& h);
 
 class Spot {
 

@@ -1,9 +1,9 @@
+#include <algorithm>
 #include <iostream>
+#include <vector>
 
 #include "poker.h"
 #include "util.h"
-
-const std::string pretty_hand(uint64_t b, bool value);
 
 std::ostream &operator<<(std::ostream &os, Flags f) {
   if (f & SFlushF)
@@ -35,15 +35,23 @@ std::ostream &operator<<(std::ostream &os, Card c) {
 
 std::ostream &operator<<(std::ostream &os, const Hand& h) {
 
+  std::vector<Card> cards;
   uint64_t v = h.colors;
 
-  os << "Cards: ";
   while (v)
-      os << Card(pop_lsb(&v));
+      cards.push_back(Card(pop_lsb(&v)));
 
-  os << "\nFlags: " << Flags(h.flags) << "\n"
-     << pretty_hand(h.colors, false) << "\n"
-     << pretty_hand(h.score, true)   << "\n";
+  // Sort the cards in descending value
+  auto comp = [](Card a, Card b){ return (a & 0xF) > (b & 0xF); };
+  std::sort(cards.begin(), cards.end(), comp);
+
+  os << "\n\nHand: ";
+  for (Card c : cards)
+      os << c;
+
+  os << "\n" << pretty_hand(h.colors, true) << "\n"
+     << "\nScore: (" << Flags(h.flags) << ")\n"
+     << pretty_hand(h.score, false)   << "\n";
 
   return os;
 }
