@@ -1,6 +1,6 @@
 #include <algorithm>
-#include <chrono>
 #include <cassert>
+#include <chrono>
 #include <cstring>
 #include <iostream>
 #include <vector>
@@ -8,17 +8,29 @@
 #include "poker.h"
 #include "util.h"
 
-typedef std::chrono::milliseconds::rep TimePoint; // A value in milliseconds
+using namespace std;
+
+const vector<string> Defaults = {
+    "4P AcTc TdTh - 5h 6h 9c",
+    "2P 3d",
+    "2P KhKs - Ac Ad 7c Ts Qs",
+    "6P",
+};
+
+typedef vector<Card> CardVec;
+
+typedef chrono::milliseconds::rep TimePoint; // A value in milliseconds
 
 static inline TimePoint now() {
-  return std::chrono::duration_cast<std::chrono::milliseconds>
-        (std::chrono::steady_clock::now().time_since_epoch()).count();
+  return chrono::duration_cast<chrono::milliseconds>(
+             chrono::steady_clock::now().time_since_epoch())
+      .count();
 }
 
-const std::string pretty_hand(uint64_t b, bool headers) {
+const string pretty_hand(uint64_t b, bool headers) {
 
-  std::string s = "\n";
-  std::string hstr = headers ? "\n" : "---+---+---+\n";
+  string s = "\n";
+  string hstr = headers ? "\n" : "---+---+---+\n";
 
   if (headers)
     s += "    | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | T | J | Q | K | A \n";
@@ -26,7 +38,7 @@ const std::string pretty_hand(uint64_t b, bool headers) {
   s += "    +---+---+---+---+---+---+---+---+---+---+---+---+---+" + hstr;
 
   for (int r = 3; r >= 0; --r) {
-    s += headers ? std::string("   ") + "dhcs"[r] : std::string("    ");
+    s += headers ? string("   ") + "dhcs"[r] : string("    ");
 
     for (int f = 0; f < (headers ? 13 : 16); ++f)
       s += b & (1ULL << ((r * 16) + f)) ? "| X " : "|   ";
@@ -37,54 +49,81 @@ const std::string pretty_hand(uint64_t b, bool headers) {
   return s;
 }
 
-std::ostream &operator<<(std::ostream &os, Flags f) {
+ostream &operator<<(ostream &os, Flags f) {
   if (f & SFlushF)
-      os << "SF ";
+    os << "SF ";
   if (f & QuadF)
-      os << "QD ";
+    os << "QD ";
   if (f & FullHF)
-      os << "FH ";
+    os << "FH ";
   if (f & FlushF)
-      os << "FL ";
+    os << "FL ";
   if (f & StraightF)
-      os << "ST ";
+    os << "ST ";
   if (f & SetF)
-      os << "S ";
+    os << "S ";
   if (f & DPairF)
-      os << "DP ";
+    os << "DP ";
   if (f & PairF)
-      os << "P ";
+    os << "P ";
   return os;
 }
 
-std::ostream &operator<<(std::ostream &os, Card c) {
+ostream &operator<<(ostream &os, Card c) {
   if (c % 16 < INVALID)
-    os << "23456789TJQKA"[c % 16] << "dhcs"[c / 16] << " ";
+    os << "23456789TJQKA"[c % 16] << "dhcs"[c / 16];
   else
     os << "-- ";
   return os;
 }
 
-std::ostream &operator<<(std::ostream &os, const Hand& h) {
+ostream &operator<<(ostream &os, const Hand &h) {
 
-  std::vector<Card> cards;
+  vector<Card> cards;
   uint64_t v = h.colors;
 
   while (v)
-      cards.push_back(Card(pop_lsb(&v)));
+    cards.push_back(Card(pop_lsb(&v)));
 
   // Sort the cards in descending value
-  auto comp = [](Card a, Card b){ return (a & 0xF) > (b & 0xF); };
-  std::sort(cards.begin(), cards.end(), comp);
+  auto comp = [](Card a, Card b) { return (a & 0xF) > (b & 0xF); };
+  sort(cards.begin(), cards.end(), comp);
 
   os << "\n\nHand: ";
   for (Card c : cards)
-      os << c;
+    os << c;
 
-  os << "\n" << pretty_hand(h.colors, true) << "\n"
+  os << "\n"
+     << pretty_hand(h.colors, true) << "\n"
      << "\nScore: (" << Flags(h.flags) << ")\n"
-     << pretty_hand(h.score, false)   << "\n";
+     << pretty_hand(h.score, false) << "\n";
 
+  return os;
+}
+
+std::ostream &operator<<(std::ostream &os, const Spot &s) {
+
+  const Card *ptr;
+  string np = {char('0' + s.numPlayers), 'P'};
+
+  os << "Spot: " << np << " ";
+
+  int n = -1;
+  while (s.holes[++n][0]) {
+    ptr = s.holes[n];
+    while (*ptr)
+      os << *ptr++;
+    os << " ";
+  }
+
+  if (s.commons[0]) {
+    os << "- ";
+    ptr = s.commons;
+    while (*ptr)
+      os << *ptr++ << " ";
+  }
+
+  os << endl;
   return os;
 }
 
@@ -95,13 +134,9 @@ struct Hash {
   static const uint64_t Mulp = 2654435789;
   uint64_t mix = 104395301;
 
-  void operator<<(unsigned v) {
-    mix += (v * Mulp) ^ (mix >> 23);
-  }
+  void operator<<(unsigned v) { mix += (v * Mulp) ^ (mix >> 23); }
 
-  uint64_t get() {
-    return mix ^ (mix << 37);
-  }
+  uint64_t get() { return mix ^ (mix << 37); }
 };
 
 void bench() {
@@ -119,41 +154,43 @@ void bench() {
 
   for (size_t players = 2; players < 10; players++) {
 
-      std::cout << "\nRunning " << NumGames / 1000
-                << "K games with " << players << " players...";
+    cout << "\nRunning " << NumGames / 1000 << "K games with " << players
+         << " players...";
 
-      memset(results, 0, sizeof(results));
-      Spot s(players);
+    memset(results, 0, sizeof(results));
+    string pos = {char('0' + players), 'P'};
+    Spot s(pos);
 
-      for (int i = 0; i < NumGames; i++) {
-          s.run(results);
+    for (int i = 0; i < NumGames; i++) {
+      s.run(results);
 
-          for (size_t p = 0; p < players; p++)
-              sig << results[p];
-      }
-
-      std::cout << "\nWins per player: ";
       for (size_t p = 0; p < players; p++)
-          std::cout << results[p] << " ";
+        sig << results[p];
+    }
 
-      hands += NumGames * players;
-      spots += NumGames;
-      std::cout << "\n" << std::endl;
+    cout << "\nWins per player: ";
+    for (size_t p = 0; p < players; p++)
+      cout << results[p] << " ";
+
+    hands += NumGames * players;
+    spots += NumGames;
+    cout << "\n" << endl;
   }
 
-  elapsed = now() - elapsed + 1; // Ensure positivity to avoid a 'divide by zero'
+  elapsed =
+      now() - elapsed + 1; // Ensure positivity to avoid a 'divide by zero'
 
-  std::cerr << "\n==========================="
-            << "\nTotal time  (ms): " << elapsed
-            << "\nHands served (M): " << hands / 1000000
-            << "\nSpots played (M): " << spots / 1000000
-            << "\nSpots/second    : " << 1000 * spots / elapsed
-            << "\nSignature       : " << sig.get();
+  cerr << "\n==========================="
+       << "\nTotal time  (ms): " << elapsed
+       << "\nHands served (M): " << hands / 1000000
+       << "\nSpots played (M): " << spots / 1000000
+       << "\nSpots/second    : " << 1000 * spots / elapsed
+       << "\nSignature       : " << sig.get();
 
   if (sig.get() == GoodSig)
-      std::cerr << " (OK)" << std::endl;
+    cerr << " (OK)" << endl;
   else
-      std::cerr << " (FAILED!)" << std::endl;
+    cerr << " (FAILED!)" << endl;
 
   PRNG::init(); // Restore random before exit
 }

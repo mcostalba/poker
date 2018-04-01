@@ -8,7 +8,11 @@
 
 #include "util.h"
 
-enum Card : unsigned { INVALID = 13 };
+constexpr int PLAYERS_NB = 16;
+constexpr int COMMON_NB  = 8;
+constexpr int HOLE_NB    = 4;
+
+enum Card : unsigned { NO_CARD = 0, INVALID = 13 };
 enum Card64 : uint64_t {}; // 6 bit per card [1..53..64], 10 cards set
 
 enum Flags {
@@ -22,7 +26,7 @@ enum Flags {
   PairF     = 1 << 0
 };
 
-// Alter score according to combination tye. Needed only for few cases, when
+// Alter score according to combination type. Needed only for few cases, when
 // native score value is not enough. We use the last 3 unused bits of quad and
 // set rows in values.
 enum FlagScores : uint64_t {
@@ -157,15 +161,20 @@ struct Hand {
 
 };
 
-std::ostream &operator<<(std::ostream &os, const Hand& h);
 
 class Spot {
-
+public:
   Hand hands[9];
-  const size_t numPlayers;
+  size_t numPlayers;
+  bool ready;
+
+  Card holes[PLAYERS_NB][HOLE_NB];
+  Card commons[COMMON_NB];
 
 public:
-  explicit Spot(size_t n) : numPlayers(n) {}
+  explicit Spot(const std::string& pos);
+
+  bool valid() { return ready; }
 
   void run(unsigned results[]) {
 
@@ -204,5 +213,8 @@ public:
   }
 
 };
+
+std::ostream& operator<<(std::ostream&, const Hand&);
+std::ostream& operator<<(std::ostream&, const Spot&);
 
 #endif // #ifndef POKER_H_INCLUDED
