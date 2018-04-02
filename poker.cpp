@@ -5,22 +5,19 @@
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <vector>
 
 #include "poker.h"
 
 using namespace std;
 
-typedef vector<Card> CardVec;
-
-static bool parse_cards(const string &token, Card **ptr, Card *end, CardVec &all) {
+static bool parse_cards(const string &token, Hand &h, Hand &all, unsigned max) {
 
   const string Values = "23456789TJQKA";
   const string Colors = "dhcs";
   size_t v, c;
 
-  // Should be even number of chars (2 per card) and not too many
-  if (token.length() % 2 || *ptr + token.length() / 2 > end)
+  // Should be even number of chars (2 per card) and not exceeding the max
+  if (token.length() % 2 || popcount(h.colors) + token.length() / 2 > max)
     return false;
 
   for (size_t i = 0; i < token.length(); i += 2) {
@@ -31,30 +28,33 @@ static bool parse_cards(const string &token, Card **ptr, Card *end, CardVec &all
 
     Card card = Card(16 * c + v);
 
-    if (find(all.begin(), all.end(), card) != all.end())
-      return false; // Duplicated card
+    if (!all.add(card, 0))
+      return false;
 
-    all.push_back(card);
-    *(*ptr)++ = card;
+    if (!h.add(card, 0)) {
+      assert(false);
+      return false;
+    }
   }
   return true;
 }
 
 // Initializes a spot from a given setup like:
 //
-//   go 4P AcTc TdTh - 5h 6h 9c
+//   4P AcTc TdTh - 5h 6h 9c
 //
 // That is 4 players, first 2 with AcTc and TdTh and
 // with flopped common cards 5h 6h 9c.
 Spot::Spot(const std::string &pos) {
 
-  CardVec all;
+  Hand all = Hand();
   string token;
   stringstream ss(pos);
 
-  memset(holes, 0, sizeof(holes));
-  memset(commons, 0, sizeof(commons));
-
+  memset(fill, 0, sizeof(fill));
+  memset(givenHoles, 0, sizeof(givenHoles));
+  memset(hands, 0, sizeof(hands));
+  givenCommon = Hand();
   ready = false;
 
   ss >> skipws >> token;
@@ -70,19 +70,26 @@ Spot::Spot(const std::string &pos) {
   // Parse spot setup like AcTc TdTh - 5h 6h 9c
   //
   // First hole cards. One token per player, up to 2 cards per token
-  int n = -1;
-  Card *ptr, *end;
+  int n = -1, *f = fill;
   while (ss >> token && token != "-") {
-    ptr = holes[++n], end = ptr + 2;
-    if (!parse_cards(token, &ptr, end, all))
+    if (!parse_cards(token, givenHoles[++n], all, 2))
       return;
+
+    // Populate fill vector with missing cards to reach hole number
+    for (int i = 0; i < 2 - popcount(givenHoles[n].colors); ++i)
+      *f++ = n;
   }
+  // Populate fill vector for missing players
+  for (int i = n + 1; i < int(numPlayers); ++i)
+    *f++ = i, *f++ = i;
+  *f = -1; // EOL
 
   // Then common cards up to 5, split or in a single token
-  ptr = commons, end = ptr + 5;
   while (ss >> token)
-    if (!parse_cards(token, &ptr, end, all))
+    if (!parse_cards(token, givenCommon, all, 5))
       return;
 
+  commonsNum = popcount(givenCommon.colors);
+  allMask = all.colors;
   ready = true;
 }

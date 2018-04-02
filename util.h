@@ -7,6 +7,7 @@
 #include <string>
 
 extern const std::string pretty_hand(uint64_t b, bool headers);
+extern void print_results(unsigned* results, size_t players);
 
 namespace PRNG {
 

@@ -11,13 +11,17 @@
 using namespace std;
 
 const vector<string> Defaults = {
-    "4P AcTc TdTh - 5h 6h 9c",
     "2P 3d",
-    "2P KhKs - Ac Ad 7c Ts Qs",
-    "6P",
+    "3P KhKs - Ac Ad 7c Ts Qs",
+    "4P AcTc TdTh - 5h 6h 9c",
+    "5P 2c3d KsTc AhTd - 4d 5d 9c 9d",
+    "6P Ac Ad KsKd 3c - 2c 2h 7c 7h 8c",
+    "7P Ad Kc QhJh 3s4s - 2c 2h 7c 5h 8c",
+    "8P - Ac Ah 3d 7h 8c",
+    "9P",
+    "4P AhAd AcTh 7c6s 2h3h - 2c 3c 4c",
+    "4P AhAd AcTh 7c6s 2h3h",
 };
-
-typedef vector<Card> CardVec;
 
 typedef chrono::milliseconds::rep TimePoint; // A value in milliseconds
 
@@ -71,7 +75,7 @@ ostream &operator<<(ostream &os, Flags f) {
 
 ostream &operator<<(ostream &os, Card c) {
   if (c % 16 < INVALID)
-    os << "23456789TJQKA"[c % 16] << "dhcs"[c / 16];
+    os << "23456789TJQKA"[c % 16] << "dhcs"[c / 16] << " ";
   else
     os << "-- ";
   return os;
@@ -94,37 +98,43 @@ ostream &operator<<(ostream &os, const Hand &h) {
     os << c;
 
   os << "\n"
-     << pretty_hand(h.colors, true) << "\n"
-     << "\nScore: (" << Flags(h.flags) << ")\n"
-     << pretty_hand(h.score, false) << "\n";
+     << pretty_hand(h.colors, true) << "\n";
+
+  if (h.score)
+     os << "\nScore: (" << Flags(h.flags) << ")\n"
+         << pretty_hand(h.score, false) << "\n";
 
   return os;
 }
 
 std::ostream &operator<<(std::ostream &os, const Spot &s) {
 
-  const Card *ptr;
   string np = {char('0' + s.numPlayers), 'P'};
 
   os << "Spot: " << np << " ";
 
-  int n = -1;
-  while (s.holes[++n][0]) {
-    ptr = s.holes[n];
-    while (*ptr)
-      os << *ptr++;
-    os << " ";
-  }
+  uint64_t common = s.hands[0].colors & s.hands[1].colors;
 
-  if (s.commons[0]) {
-    os << "- ";
-    ptr = s.commons;
-    while (*ptr)
-      os << *ptr++ << " ";
-  }
+  // Additional debug info
+  //
+  os << "\n\ncommon:" << pretty_hand(common, false);
+  for (size_t i = 0; i < s.numPlayers ; ++i)
+      os << "Player " << i+1 << ":" << s.hands[i] << "\n";
 
   os << endl;
   return os;
+}
+
+void print_results(unsigned* results, size_t players) {
+
+    size_t sum = 0;
+    for (size_t p = 0; p < players; p++)
+      sum += results[p];
+
+    cout << "\nEquity: ";
+    for (size_t p = 0; p < players; p++)
+      cout << (results[p] * 100) / sum << "%  ";
+    cout << endl;
 }
 
 // Quick hash, see https://stackoverflow.com/questions/13325125/
@@ -141,40 +151,34 @@ struct Hash {
 
 void bench() {
 
-  const int NumGames = 1500 * 1000;
-  const uint64_t GoodSig = 12289633340404457000ULL;
+  const int NumGames = 1000 * 1000;
+  const uint64_t GoodSig = 14393152888937513767ULL;
 
   PRNG::init(0x4209920184674cbfULL);
 
   unsigned results[10];
-  uint64_t hands = 0, spots = 0;
+  uint64_t hands = 0, spots = 0, cnt = 1;
   Hash sig;
 
   TimePoint elapsed = now();
 
-  for (size_t players = 2; players < 10; players++) {
+  for (const string& v : Defaults) {
 
-    cout << "\nRunning " << NumGames / 1000 << "K games with " << players
-         << " players...";
-
+    cout << "\nP" << cnt++ << ": " << v;
     memset(results, 0, sizeof(results));
-    string pos = {char('0' + players), 'P'};
-    Spot s(pos);
+    Spot s(v);
 
     for (int i = 0; i < NumGames; i++) {
       s.run(results);
 
-      for (size_t p = 0; p < players; p++)
+      for (size_t p = 0; p < s.numPlayers; p++)
         sig << results[p];
     }
 
-    cout << "\nWins per player: ";
-    for (size_t p = 0; p < players; p++)
-      cout << results[p] << " ";
+    print_results(results, s.numPlayers);
 
-    hands += NumGames * players;
+    hands += NumGames * s.numPlayers;
     spots += NumGames;
-    cout << "\n" << endl;
   }
 
   elapsed =

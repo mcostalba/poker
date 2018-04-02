@@ -1,7 +1,7 @@
+#include <cstring>
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <vector>
 
 #include "poker.h"
 #include "util.h"
@@ -21,10 +21,21 @@ void go(istringstream &is) {
     return;
   }
 
-  cout << s << endl;
+  unsigned results[10];
+  memset(results, 0, sizeof(results));
+
+  for (int i = 0; i < 1 * 1000 * 1000; i++)
+  {
+      s.run(results);
+      //cout << s << "\n\n\n*******************\n" << endl;
+  }
+
+  print_results(results, s.numPlayers);
 }
 
 int main(int argc, char *argv[]) {
+
+  PRNG::init();
 
   string token, cmd;
 
@@ -51,6 +62,8 @@ int main(int argc, char *argv[]) {
       cout << "Unknown command: " << cmd << endl;
 
   } while (token != "quit" && argc == 1); // Command line args are one-shot
+
+  cout << endl; // FXIME
 
   return 0;
 }
