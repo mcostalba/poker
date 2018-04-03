@@ -11,8 +11,11 @@
 constexpr int PLAYERS_NB = 9;
 constexpr int HOLE_NB = 2;
 
+constexpr uint64_t LAST = 0xE000;
+constexpr uint64_t INVALID_BB = LAST | (LAST << 16) | (LAST << 32) | (LAST << 48);
+
 enum Card : unsigned { NO_CARD = 0, INVALID = 13 };
-enum Card64 : uint64_t {}; // 6 bit per card [1..53..64], 10 cards set
+enum Card64 : uint64_t {}; // 6 bit per card [1..53], 2 msb is color, 4 lsb is value
 
 enum Flags {
   SFlushF = 1 << 7,
@@ -51,15 +54,13 @@ struct Hand {
 
   unsigned add(Card c, uint64_t all) {
 
-    if ((c & 0xF) >= INVALID)
+    uint64_t n = 1ULL << c;
+
+    if ((colors | all) & n) // Double card or invalid
       return 0;
 
-    uint64_t n = 1 << (c & 0xF);
-
-    if (((colors | all) & (n << (c & 0x30)))) // Double card
-      return 0;
-
-    colors |= n << (c & 0x30);
+    colors |= n;
+    n = 1 << (c & 0xF);
 
     while (true) {
       if (!(values & n))
@@ -126,9 +127,15 @@ struct Hand {
     values ^= b;
   }
 
+  template<Flags F>
+  inline uint64_t process(uint64_t v, int& cnt) {
+    constexpr int N = (F == QuadF ? 4 : F == SetF ? 3 : 2);
+    flags |= F, cnt -= N, v = msb_bb(v), drop<N>(v);
+    return v;
+  }
+
   void do_score() {
 
-    uint64_t v;
     int cnt = 5; // Pick and score the 5 best cards
 
     // is_flush() and is_straight() map values into Rank1BB, so all the other
@@ -140,17 +147,17 @@ struct Hand {
       flags |= StraightF, score |= StraightS;
 
     // We can't have quad and straight or flush at the same time
-    if ((v = (values & Rank4BB)) != 0 && cnt >= 4)
-      flags |= QuadF, v = msb_bb(v), score |= v, drop<4>(v), cnt -= 4;
+    if ((values & Rank4BB) != 0 && cnt >= 4)
+        score |= process<QuadF>(values & Rank4BB, cnt);
 
-    if ((v = (values & Rank3BB)) != 0 && cnt >= 3)
-      flags |= SetF, v = msb_bb(v), score |= v, drop<3>(v), cnt -= 3;
+    if ((values & Rank3BB) != 0 && cnt >= 3)
+        score |= process<SetF>(values & Rank3BB, cnt);
 
-    if ((v = (values & Rank2BB)) != 0 && cnt >= 2)
-      flags |= PairF, v = msb_bb(v), score |= v, drop<2>(v), cnt -= 2;
+    if ((values & Rank2BB) != 0 && cnt >= 2)
+        score |= process<PairF>(values & Rank2BB, cnt);
 
-    if ((v = (values & Rank2BB)) != 0 && cnt >= 2)
-      flags |= DPairF, v = msb_bb(v), score |= v, drop<2>(v), cnt -= 2;
+    if ((values & Rank2BB) != 0 && cnt >= 2)
+        score |= process<DPairF>(values & Rank2BB, cnt);
 
     if ((flags & (FlushF | StraightF)) == (FlushF | StraightF))
       flags |= SFlushF, score |= SFlushS;
@@ -159,7 +166,7 @@ struct Hand {
       flags |= FullHF, score |= FullHS;
 
     // Pick the highest 5 only
-    v = values & Rank1BB;
+    uint64_t v = values & Rank1BB;
     int p = popcount(v);
     while (p-- > cnt)
       v &= v - 1;

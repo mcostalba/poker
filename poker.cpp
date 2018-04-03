@@ -91,7 +91,7 @@ Spot::Spot(const std::string &pos) {
       return;
 
   commonsNum = popcount(givenCommon.colors);
-  allMask = all.colors;
+  allMask = all.colors | INVALID_BB;
   ready = true;
 }
 
