@@ -31,9 +31,8 @@ ThreadPool Threads; // Global object
 /// Thread constructor launches the thread and waits until it goes to sleep
 /// in idle_loop(). Note that 'searching' and 'exit' should be alredy set.
 
-Thread::Thread() : stdThread(&Thread::idle_loop, this) {
+Thread::Thread(size_t n) : stdThread(&Thread::idle_loop, this), prng(n) {
 
-  PRNG::jump();
   wait_for_search_finished();
 }
 
@@ -108,7 +107,7 @@ void ThreadPool::set(size_t requested) {
       delete back(), pop_back();
 
   while (size() < requested)
-      push_back(new Thread());
+      push_back(new Thread(size()));
 }
 
 void ThreadPool::run(const Spot& s, size_t gamesNum, unsigned results[]) {

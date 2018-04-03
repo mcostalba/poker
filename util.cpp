@@ -155,7 +155,6 @@ void bench(istringstream &is) {
 
   const int NumGames = 500 * 1000;
 
-  PRNG::init();
   Threads.set(0); // Re-init prng for each thread
 
   unsigned results[10];

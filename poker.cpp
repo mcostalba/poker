@@ -55,6 +55,7 @@ Spot::Spot(const std::string &pos) {
   memset(givenHoles, 0, sizeof(givenHoles));
   memset(hands, 0, sizeof(hands));
   givenCommon = Hand();
+  prng = nullptr;
   ready = false;
 
   ss >> skipws >> token;
@@ -102,7 +103,7 @@ void Spot::run(unsigned results[]) {
 
   unsigned cnt = 5 - commonsNum;
   while (cnt) {
-    uint64_t n = PRNG::next();
+    uint64_t n = prng->next();
     for (unsigned i = 0; i <= 64 - 6; i += 6) {
       if (common.add(Card((n >> i) & 0x3F), allMask) && --cnt == 0)
         break;
@@ -116,7 +117,7 @@ void Spot::run(unsigned results[]) {
 
   const int *f = fill;
   while (*f != -1) {
-    uint64_t n = PRNG::next();
+    uint64_t n = prng->next();
     for (unsigned i = 0; i <= 64 - 6; i += 6) {
       if (hands[*f].add(Card((n >> i) & 0x3F), allMask) && *(++f) == -1)
         break;

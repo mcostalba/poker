@@ -9,13 +9,16 @@
 extern const std::string pretty_hand(uint64_t b, bool headers);
 extern void print_results(unsigned* results, size_t players);
 
-namespace PRNG {
+class PRNG {
 
-void init(uint64_t = 0);
-uint64_t next();
-void jump(void);
+  uint64_t s[2];
 
-} // namespace PRNG
+  void jump(void);
+
+public:
+  PRNG(size_t idx, uint64_t seed = 0);
+  uint64_t next();
+};
 
 
 /// bench() runs a benchmark for speed and signature

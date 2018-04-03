@@ -175,6 +175,7 @@ class Spot {
   Hand hands[PLAYERS_NB];
   Hand givenCommon;
 
+  PRNG* prng;
   size_t numPlayers;
   unsigned commonsNum;
   uint64_t allMask;
@@ -186,6 +187,7 @@ public:
   Spot() = default;
   explicit Spot(const std::string &pos);
   void run(unsigned results[]);
+  void set_prng(PRNG* p) { prng = p; }
   bool valid() const { return ready; }
   size_t players() const { return numPlayers; }
 };

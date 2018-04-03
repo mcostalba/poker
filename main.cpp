@@ -37,7 +37,6 @@ void go(istringstream &is) {
 
 int main(int argc, char *argv[]) {
 
-  PRNG::init();
   Threads.set(1);
 
   string token, cmd;

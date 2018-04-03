@@ -28,6 +28,7 @@
 #include <vector>
 
 #include "poker.h"
+#include "util.h"
 #include "thread_win32.h"
 
 
@@ -43,13 +44,13 @@ class Thread {
   bool exit = false, searching = true; // Set before starting std::thread
   std::thread stdThread;
 
+  PRNG prng;
   Spot spot;
   unsigned results[10];
   size_t gamesNum;
 
-
 public:
-  Thread();
+  explicit Thread(size_t);
   ~Thread();
   void idle_loop();
   void start_searching();
@@ -60,6 +61,7 @@ public:
   void set_spot(const Spot& s, size_t n) {
     spot = s;
     gamesNum = n;
+    spot.set_prng(&prng);
   }
 };
 

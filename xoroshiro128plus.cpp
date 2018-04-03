@@ -9,6 +9,8 @@ See <http://creativecommons.org/publicdomain/zero/1.0/>. */
 #include <cstdlib>
 #include <stdint.h>
 
+#include "util.h"
+
 /* This is the successor to xorshift128+. It is the fastest full-period
    generator passing BigCrush without systematic failures, but due to the
    relatively short period it is acceptable only for applications with a
@@ -33,15 +35,11 @@ See <http://creativecommons.org/publicdomain/zero/1.0/>. */
    a 64-bit seed, we suggest to seed a splitmix64 generator and use its
    output to fill s. */
 
-namespace PRNG {
-
-uint64_t s[2];
-
 static inline uint64_t rotl(const uint64_t x, int k) {
     return (x << k) | (x >> (64 - k));
 }
 
-uint64_t next(void) {
+uint64_t PRNG::next() {
     const uint64_t s0 = s[0];
     uint64_t s1 = s[1];
     const uint64_t result = s0 + s1;
@@ -53,18 +51,20 @@ uint64_t next(void) {
     return result;
 }
 
-void init(uint64_t seed) {
+PRNG::PRNG(size_t idx, uint64_t seed) {
     s[0] = seed ? seed : 0x4209920184674cbfULL;
     s[1] = 0;
-    next(), next();
+    next();
+    next();
+    while (idx--)
+        jump();
 }
-
 
 /* This is the jump function for the generator. It is equivalent
    to 2^64 calls to next(); it can be used to generate 2^64
    non-overlapping subsequences for parallel computations. */
 
-void jump(void) {
+void PRNG::jump() {
     static const uint64_t JUMP[] = { 0xbeac0467eba5facb, 0xd86b048b86aa9922 };
 
     uint64_t s0 = 0;
@@ -80,6 +80,4 @@ void jump(void) {
 
     s[0] = s0;
     s[1] = s1;
-}
-
 }
