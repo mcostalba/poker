@@ -13,12 +13,13 @@ namespace PRNG {
 
 void init(uint64_t = 0);
 uint64_t next();
+void jump(void);
 
 } // namespace PRNG
 
 
 /// bench() runs a benchmark for speed and signature
-void bench();
+void bench(std::istringstream &is);
 
 
 /// popcount() counts the number of non-zero bits in a uint64_t

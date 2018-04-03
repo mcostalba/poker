@@ -3,9 +3,11 @@
 #include <chrono>
 #include <cstring>
 #include <iostream>
+#include <sstream>
 #include <vector>
 
 #include "poker.h"
+#include "thread.h"
 #include "util.h"
 
 using namespace std;
@@ -131,7 +133,7 @@ void print_results(unsigned* results, size_t players) {
     for (size_t p = 0; p < players; p++)
       sum += results[p];
 
-    cout << "\nEquity: ";
+    cout << "Equity: ";
     for (size_t p = 0; p < players; p++)
       cout << (results[p] * 100) / sum << "%  ";
     cout << endl;
@@ -149,16 +151,20 @@ struct Hash {
   uint64_t get() { return mix ^ (mix << 37); }
 };
 
-void bench() {
+void bench(istringstream &is) {
 
-  const int NumGames = 1000 * 1000;
-  const uint64_t GoodSig = 14393152888937513767ULL;
+  const int NumGames = 500 * 1000;
 
-  PRNG::init(0x4209920184674cbfULL);
+  PRNG::init();
+  Threads.set(0); // Re-init prng for each thread
 
   unsigned results[10];
+  string token;
   uint64_t hands = 0, spots = 0, cnt = 1;
   Hash sig;
+
+  int threadsNum = (is >> token) ? stoi(token) : 1;
+  Threads.set(threadsNum);
 
   TimePoint elapsed = now();
 
@@ -167,17 +173,15 @@ void bench() {
     cout << "\nP" << cnt++ << ": " << v;
     memset(results, 0, sizeof(results));
     Spot s(v);
+    Threads.run(s, NumGames, results);
 
-    for (int i = 0; i < NumGames; i++) {
-      s.run(results);
-
-      for (size_t p = 0; p < s.numPlayers; p++)
+    for (size_t p = 0; p < s.players(); p++)
         sig << results[p];
-    }
+    cout << "\n";
 
-    print_results(results, s.numPlayers);
+    print_results(results, s.players());
 
-    hands += NumGames * s.numPlayers;
+    hands += NumGames * s.players();
     spots += NumGames;
   }
 
@@ -189,12 +193,5 @@ void bench() {
        << "\nHands served (M): " << hands / 1000000
        << "\nSpots played (M): " << spots / 1000000
        << "\nSpots/second    : " << 1000 * spots / elapsed
-       << "\nSignature       : " << sig.get();
-
-  if (sig.get() == GoodSig)
-    cerr << " (OK)" << endl;
-  else
-    cerr << " (FAILED!)" << endl;
-
-  PRNG::init(); // Restore random before exit
+       << "\nSignature       : " << sig.get() << endl;
 }

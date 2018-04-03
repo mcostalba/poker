@@ -8,7 +8,6 @@ See <http://creativecommons.org/publicdomain/zero/1.0/>. */
 
 #include <cstdlib>
 #include <stdint.h>
-#include <time.h>
 
 /* This is the successor to xorshift128+. It is the fastest full-period
    generator passing BigCrush without systematic failures, but due to the
@@ -55,15 +54,9 @@ uint64_t next(void) {
 }
 
 void init(uint64_t seed) {
-    srand(time(NULL));
-    s[0] = rand(); // Initialize random seed
-    s[1] = rand();
-    s[0] = (s[0] << 32) ^ rand();
-    s[1] = (s[1] << 32) ^ rand();
-
-    // Overwrite if seed is provided
-    if (seed)
-        s[0] = seed, s[1] = 0;
+    s[0] = seed ? seed : 0x4209920184674cbfULL;
+    s[1] = 0;
+    next(), next();
 }
 
 
@@ -76,7 +69,7 @@ void jump(void) {
 
     uint64_t s0 = 0;
     uint64_t s1 = 0;
-    for(int i = 0; i < sizeof JUMP / sizeof *JUMP; i++)
+    for(size_t i = 0; i < sizeof(JUMP) / sizeof(*JUMP); i++)
         for(int b = 0; b < 64; b++) {
             if (JUMP[i] & 1ULL << b) {
                 s0 ^= s[0];

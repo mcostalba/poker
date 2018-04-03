@@ -93,3 +93,47 @@ Spot::Spot(const std::string &pos) {
   allMask = all.colors;
   ready = true;
 }
+
+// Run a single spot and update results vector
+void Spot::run(unsigned results[]) {
+
+  uint64_t maxScore = 0;
+  Hand common = givenCommon;
+
+  unsigned cnt = 5 - commonsNum;
+  while (cnt) {
+    uint64_t n = PRNG::next();
+    for (unsigned i = 0; i <= 64 - 6; i += 6) {
+      if (common.add(Card((n >> i) & 0x3F), allMask) && --cnt == 0)
+        break;
+    }
+  }
+
+  for (size_t i = 0; i < numPlayers; ++i) {
+    hands[i] = common;
+    hands[i].merge(givenHoles[i]);
+  }
+
+  const int *f = fill;
+  while (*f != -1) {
+    uint64_t n = PRNG::next();
+    for (unsigned i = 0; i <= 64 - 6; i += 6) {
+      if (hands[*f].add(Card((n >> i) & 0x3F), allMask) && *(++f) == -1)
+        break;
+    }
+  }
+
+  for (size_t i = 0; i < numPlayers; ++i) {
+
+    hands[i].do_score();
+
+    if (maxScore < hands[i].score)
+      maxScore = hands[i].score;
+  }
+
+  // Credit the winner, considering split results
+  for (size_t i = 0; i < numPlayers; ++i) {
+    if (hands[i].score == maxScore)
+      results[i]++;
+  }
+}

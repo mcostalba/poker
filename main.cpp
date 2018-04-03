@@ -4,9 +4,17 @@
 #include <string>
 
 #include "poker.h"
+#include "thread.h"
 #include "util.h"
 
 using namespace std;
+
+void set_threads(istringstream &is) {
+
+  string token;
+  if (is >> token)
+      Threads.set(stoi(token));
+}
 
 void go(istringstream &is) {
 
@@ -23,19 +31,14 @@ void go(istringstream &is) {
 
   unsigned results[10];
   memset(results, 0, sizeof(results));
-
-  for (int i = 0; i < 1 * 1000 * 1000; i++)
-  {
-      s.run(results);
-      //cout << s << "\n\n\n*******************\n" << endl;
-  }
-
-  print_results(results, s.numPlayers);
+  Threads.run(s, 500 * 1000, results);
+  print_results(results, s.players());
 }
 
 int main(int argc, char *argv[]) {
 
   PRNG::init();
+  Threads.set(1);
 
   string token, cmd;
 
@@ -54,10 +57,12 @@ int main(int argc, char *argv[]) {
 
     if (token == "quit")
       break;
+    else if (token == "threads")
+      set_threads(is);
     else if (token == "go")
       go(is);
     else if (token == "bench")
-      bench();
+      bench(is);
     else
       cout << "Unknown command: " << cmd << endl;
 

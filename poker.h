@@ -47,6 +47,8 @@ struct Hand {
   uint64_t score;  // Only the 5 best cards, used to compare hands
   uint32_t flags;  // One flag for each combination
 
+  friend std::ostream &operator<<(std::ostream &, const Hand &);
+
   unsigned add(Card c, uint64_t all) {
 
     if ((c & 0xF) >= INVALID)
@@ -167,7 +169,7 @@ struct Hand {
 };
 
 class Spot {
-public:
+
   int fill[PLAYERS_NB * HOLE_NB + 1];
   Hand givenHoles[PLAYERS_NB];
   Hand hands[PLAYERS_NB];
@@ -178,56 +180,14 @@ public:
   uint64_t allMask;
   bool ready;
 
+  friend std::ostream &operator<<(std::ostream &, const Spot &);
+
 public:
+  Spot() = default;
   explicit Spot(const std::string &pos);
-
+  void run(unsigned results[]);
   bool valid() const { return ready; }
-
-  void run(unsigned results[]) {
-
-    uint64_t maxScore = 0;
-    Hand common = givenCommon;
-
-    unsigned cnt = 5 - commonsNum;
-    while (cnt) {
-      uint64_t n = PRNG::next();
-      for (unsigned i = 0; i <= 64 - 6; i += 6) {
-        if (common.add(Card((n >> i) & 0x3F), allMask) && --cnt == 0)
-          break;
-      }
-    }
-
-    for (size_t i = 0; i < numPlayers; ++i) {
-      hands[i] = common;
-      hands[i].merge(givenHoles[i]);
-    }
-
-    const int *f = fill;
-    while (*f != -1) {
-      uint64_t n = PRNG::next();
-      for (unsigned i = 0; i <= 64 - 6; i += 6) {
-        if (hands[*f].add(Card((n >> i) & 0x3F), allMask) && *(++f) == -1)
-          break;
-      }
-    }
-
-    for (size_t i = 0; i < numPlayers; ++i) {
-
-      hands[i].do_score();
-
-      if (maxScore < hands[i].score)
-        maxScore = hands[i].score;
-    }
-
-    // Credit the winner, considering split results
-    for (size_t i = 0; i < numPlayers; ++i) {
-      if (hands[i].score == maxScore)
-        results[i]++;
-    }
-  }
+  size_t players() const { return numPlayers; }
 };
-
-std::ostream &operator<<(std::ostream &, const Hand &);
-std::ostream &operator<<(std::ostream &, const Spot &);
 
 #endif // #ifndef POKER_H_INCLUDED

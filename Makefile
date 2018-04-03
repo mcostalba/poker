@@ -32,7 +32,7 @@ BINDIR = $(PREFIX)/bin
 PGOBENCH = ./$(EXE) bench
 
 ### Object files
-OBJS = main.o util.o poker.o xoroshiro128plus.c
+OBJS = main.o util.o poker.o thread.o xoroshiro128plus.o
 
 ### Establish the operating system name
 KERNEL = $(shell uname -s)
