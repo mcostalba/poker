@@ -37,6 +37,7 @@ void go(istringstream &is) {
 
 int main(int argc, char *argv[]) {
 
+  init_score_mask();
   Threads.set(1);
 
   string token, cmd;

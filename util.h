@@ -21,6 +21,9 @@ public:
 };
 
 
+void init_score_mask();
+extern uint64_t ScoreMask[4096];
+
 /// bench() runs a benchmark for speed and signature
 void bench(std::istringstream &is);
 
@@ -120,6 +123,12 @@ inline unsigned long msb(uint64_t b) {
 inline unsigned pop_lsb(uint64_t* b) {
   const unsigned s = lsb(*b);
   *b &= *b - 1;
+  return s;
+}
+
+inline unsigned pop_msb(uint64_t* b) {
+  const unsigned s = msb(*b);
+  *b ^= 1ULL << s;
   return s;
 }
 

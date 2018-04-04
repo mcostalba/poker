@@ -12,10 +12,12 @@ constexpr int PLAYERS_NB = 9;
 constexpr int HOLE_NB = 2;
 
 constexpr uint64_t LAST = 0xE000;
-constexpr uint64_t INVALID_BB = LAST | (LAST << 16) | (LAST << 32) | (LAST << 48);
+constexpr uint64_t INVALID_BB =
+    LAST | (LAST << 16) | (LAST << 32) | (LAST << 48);
 
 enum Card : unsigned { NO_CARD = 0, INVALID = 13 };
-enum Card64 : uint64_t {}; // 6 bit per card [1..53], 2 msb is color, 4 lsb is value
+enum Card64 : uint64_t {
+}; // 6 bit per card [1..53], 2 msb is color, 4 lsb is value
 
 enum Flags {
   SFlushF = 1 << 7,
@@ -109,69 +111,37 @@ struct Hand {
     uint64_t v = values & Rank1BB;
     v = (v << 1) | (v >> 12); // Duplicate an ace into first position
     v &= v >> 1, v &= v >> 1, v &= v >> 1, v &= v >> 1;
-    return v ? values = (v << 3) : 0;
-  }
-
-  // Remove file of b from values
-  template <int N> inline void drop(uint64_t b) {
-
-    if (N == 4)
-      b |= (b >> 16) | (b >> 32) | (b >> 48);
-    else if (N == 3)
-      b |= (b >> 16) | (b >> 32);
-    else if (N == 2)
-      b |= (b >> 16);
-
-    assert((values & b) == b);
-
-    values ^= b;
-  }
-
-  template<Flags F>
-  inline uint64_t process(uint64_t v, int& cnt) {
-    constexpr int N = (F == QuadF ? 4 : F == SetF ? 3 : 2);
-    flags |= F, cnt -= N, v = msb_bb(v), drop<N>(v);
-    return v;
+    return v ? values = (v << 3) | (v << 2) : 0; // At least 2 bit for ScoreMask
   }
 
   void do_score() {
 
-    int cnt = 5; // Pick and score the 5 best cards
-
-    // is_flush() and is_straight() map values into Rank1BB, so all the other
-    // checks on ranks above the first are always false.
+    // is_flush() and is_straight() map values into Rank1BB
     if (is_flush())
-      flags |= FlushF, score |= FlushS;
+      score |= FlushS;
 
     if (is_straight())
-      flags |= StraightF, score |= StraightS;
+      score |= StraightS;
 
-    // We can't have quad and straight or flush at the same time
-    if ((values & Rank4BB) != 0 && cnt >= 4)
-        score |= process<QuadF>(values & Rank4BB, cnt);
+    // Straight-flush
+    if ((score & (FlushS | StraightS)) == (FlushS | StraightS))
+      score |= SFlushS;
 
-    if ((values & Rank3BB) != 0 && cnt >= 3)
-        score |= process<SetF>(values & Rank3BB, cnt);
+    // Drop all bits below the set ones so that msb()
+    // returns values on different files.
+    uint64_t b = values ^ (values >> 16);
 
-    if ((values & Rank2BB) != 0 && cnt >= 2)
-        score |= process<PairF>(values & Rank2BB, cnt);
+    // Mask out needed bits to get the score
+    unsigned cnt = pop_msb(&b) << 6;
+    b = ScoreMask[cnt + msb(b)];
+    score |= (values | FullHS) & b;
 
-    if ((values & Rank2BB) != 0 && cnt >= 2)
-        score |= process<DPairF>(values & Rank2BB, cnt);
-
-    if ((flags & (FlushF | StraightF)) == (FlushF | StraightF))
-      flags |= SFlushF, score |= SFlushS;
-
-    if ((flags & (SetF | PairF)) == (SetF | PairF))
-      flags |= FullHF, score |= FullHS;
-
-    // Pick the highest 5 only
-    uint64_t v = values & Rank1BB;
-    int p = popcount(v);
+    // Drop the lowest cards so that 5 remains
+    cnt = (unsigned(b) >> 13) & 0x7;
+    uint64_t v = score & Rank1BB;
+    unsigned p = popcount(v);
     while (p-- > cnt)
-      v &= v - 1;
-
-    score |= v;
+      score &= score - 1;
   }
 };
 
@@ -182,7 +152,7 @@ class Spot {
   Hand hands[PLAYERS_NB];
   Hand givenCommon;
 
-  PRNG* prng;
+  PRNG *prng;
   size_t numPlayers;
   unsigned commonsNum;
   uint64_t allMask;
@@ -194,7 +164,7 @@ public:
   Spot() = default;
   explicit Spot(const std::string &pos);
   void run(unsigned results[]);
-  void set_prng(PRNG* p) { prng = p; }
+  void set_prng(PRNG *p) { prng = p; }
   bool valid() const { return ready; }
   size_t players() const { return numPlayers; }
 };
