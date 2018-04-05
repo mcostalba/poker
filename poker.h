@@ -15,18 +15,14 @@ constexpr uint64_t LAST = 0xE000;
 constexpr uint64_t FLAGS_AREA =
     LAST | (LAST << 16) | (LAST << 32) | (LAST << 48);
 
-// We use a 32 bit split in 4 parts (5 bit  each) inited
-// with 11 and add 1 for every card to the slot
-// according to card's color, if one slot reaches 16, then
+// We use a 32 bit split in 4 parts (4 bit  each) set at 3 and add 1 for every
+// card to the slot according to card's suit, if one slot reaches 8, then
 // we have a flush.
-constexpr uint32_t COLOR_INIT = 11 | (11 << 5) | (11 << 10) | (11 << 15);
-
-constexpr uint32_t COLOR_SLOTS[4] = {1, 1 << 5, 1 << 10, 1 << 15};
-constexpr uint32_t IS_FLUSH = 16 | (16 << 5) | (16 << 10) | (16 << 15);
+constexpr uint32_t ColorInit = 3 | (3 << 4) | (3 << 8) | (3 << 12);
+constexpr uint32_t ColorAdd[4] = {1, 1 << 4, 1 << 8, 1 << 12};
+constexpr uint32_t IsFlush = 8 | (8 << 4) | (8 << 8) | (8 << 12);
 
 enum Card : unsigned { NO_CARD = 0, INVALID = 13 };
-enum Card64 : uint64_t {
-}; // 6 bit per card [1..53], 2 msb is color, 4 lsb is value
 
 enum Flags {
   SFlushF = 1 << 7,
@@ -59,7 +55,7 @@ constexpr uint64_t RanksBB[] = {Rank1BB, Rank2BB, Rank3BB, Rank4BB};
 struct Hand {
 
   uint64_t score; // 16bit (for each card num) * 4 (for pairs, set and quads)
-  uint64_t cards; // 16bit for each color
+  uint64_t cards; // 16bit for each suit
   uint32_t colors;
 
   friend std::ostream &operator<<(std::ostream &, const Hand &);
@@ -74,7 +70,7 @@ struct Hand {
     cards |= n;
     n = 1 << (c & 0xF);
 
-    colors += COLOR_SLOTS[(c & 0x30) >> 4];
+    colors += ColorAdd[(c & 0x30) >> 4];
 
     while (true) {
       if (!(score & n))
@@ -99,8 +95,8 @@ struct Hand {
 
   void do_score() {
 
-    if (colors & IS_FLUSH) {
-      unsigned r = lsb(colors & IS_FLUSH) / 5;
+    if (colors & IsFlush) {
+      unsigned r = lsb(colors & IsFlush) / 4;
       score = FlushS | ((cards & RanksBB[r]) >> (16 * r));
     }
 
@@ -108,7 +104,7 @@ struct Hand {
     // https://stackoverflow.com/questions/10911780/looping-through-bits-in-an-integer-ruby
     uint64_t v = score & Rank1BB;
     v = (v << 1) | (v >> 12); // Duplicate an ace into first position
-    v &= v >> 1, v &= v >> 1, v &= v >> 1, v &= v >> 1;
+    v &= v >> 1, v &= v >> 1, v &= v >> 2;
     if (v) {
       score &= FLAGS_AREA;
       score |= (score & FlushS) ? SFlushS | StraightS : StraightS;
