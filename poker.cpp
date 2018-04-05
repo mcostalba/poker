@@ -17,7 +17,7 @@ static bool parse_cards(const string &token, Hand &h, Hand &all, unsigned max) {
   size_t v, c;
 
   // Should be even number of chars (2 per card) and not exceeding the max
-  if (token.length() % 2 || popcount(h.colors) + token.length() / 2 > max)
+  if (token.length() % 2 || popcount(h.cards) + token.length() / 2 > max)
     return false;
 
   for (size_t i = 0; i < token.length(); i += 2) {
@@ -77,7 +77,7 @@ Spot::Spot(const std::string &pos) {
       return;
 
     // Populate fill vector with missing cards to reach hole number
-    for (int i = 0; i < 2 - popcount(givenHoles[n].colors); ++i)
+    for (int i = 0; i < 2 - popcount(givenHoles[n].cards); ++i)
       *f++ = n;
   }
   // Populate fill vector for missing players
@@ -90,8 +90,8 @@ Spot::Spot(const std::string &pos) {
     if (!parse_cards(token, givenCommon, all, 5))
       return;
 
-  commonsNum = popcount(givenCommon.colors);
-  allMask = all.colors | INVALID_BB;
+  commonsNum = popcount(givenCommon.cards);
+  allMask = all.cards | FLAGS_AREA;
   ready = true;
 }
 

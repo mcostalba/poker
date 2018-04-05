@@ -12,7 +12,7 @@ constexpr int PLAYERS_NB = 9;
 constexpr int HOLE_NB = 2;
 
 constexpr uint64_t LAST = 0xE000;
-constexpr uint64_t INVALID_BB =
+constexpr uint64_t FLAGS_AREA =
     LAST | (LAST << 16) | (LAST << 32) | (LAST << 48);
 
 enum Card : unsigned { NO_CARD = 0, INVALID = 13 };
@@ -47,10 +47,8 @@ constexpr uint64_t Rank4BB = 0xFFFFULL << (16 * 3);
 
 struct Hand {
 
-  uint64_t values; // 16bit (for each card num) * 4 (for pairs, set and quads)
-  uint64_t colors; // 16bit for each color
-  uint64_t score;  // Only the 5 best cards, used to compare hands
-  uint32_t flags;  // One flag for each combination
+  uint64_t score; // 16bit (for each card num) * 4 (for pairs, set and quads)
+  uint64_t cards; // 16bit for each color
 
   friend std::ostream &operator<<(std::ostream &, const Hand &);
 
@@ -58,88 +56,81 @@ struct Hand {
 
     uint64_t n = 1ULL << c;
 
-    if ((colors | all) & n) // Double card or invalid
+    if ((cards | all) & n) // Double card or invalid
       return 0;
 
-    colors |= n;
+    cards |= n;
     n = 1 << (c & 0xF);
 
     while (true) {
-      if (!(values & n))
-        return values |= n, 1;
+      if (!(score & n))
+        return score |= n, 1;
       n <<= 16;
     }
   }
 
   void merge(const Hand &holes) {
 
-    if ((values & holes.values) == 0) { // Common case
-      values |= holes.values;
-      colors |= holes.colors;
+    if ((score & holes.score) == 0) { // Common case
+      score |= holes.score;
+      cards |= holes.cards;
       return;
     }
     // We are unlucky: add one by one
-    uint64_t v = holes.colors;
+    uint64_t v = holes.cards;
     while (v)
       add(Card(pop_lsb(&v)), 0);
   }
 
-  uint64_t is_flush() {
+  void check_flush() {
 
-    if (popcount(colors & Rank4BB) >= 5)
-      values = (colors & Rank4BB) >> 48;
+    // Score could be more than 5, to check for a flush-straight
+    if (popcount(cards & Rank4BB) >= 5)
+      score = FlushS | ((cards & Rank4BB) >> 48);
 
-    else if (popcount(colors & Rank3BB) >= 5)
-      values = (colors & Rank3BB) >> 32;
+    else if (popcount(cards & Rank3BB) >= 5)
+      score = FlushS | ((cards & Rank3BB) >> 32);
 
-    else if (popcount(colors & Rank2BB) >= 5)
-      values = (colors & Rank2BB) >> 16;
+    else if (popcount(cards & Rank2BB) >= 5)
+      score = FlushS | ((cards & Rank2BB) >> 16);
 
-    else if (popcount(colors & Rank1BB) >= 5)
-      values = colors & Rank1BB;
-
-    else
-      return 0;
-
-    return values; // Could be more than 5, to check for a flush-straight
+    else if (popcount(cards & Rank1BB) >= 5)
+      score = FlushS | (cards & Rank1BB);
   }
 
   // See
   // https://stackoverflow.com/questions/10911780/looping-through-bits-in-an-integer-ruby
-  uint64_t is_straight() {
+  void check_straight() {
 
-    uint64_t v = values & Rank1BB;
+    uint64_t v = score & Rank1BB;
     v = (v << 1) | (v >> 12); // Duplicate an ace into first position
     v &= v >> 1, v &= v >> 1, v &= v >> 1, v &= v >> 1;
-    return v ? values = (v << 3) | (v << 2) : 0; // At least 2 bit for ScoreMask
+    if (v) {
+      uint64_t f = score & FLAGS_AREA;
+      f |= (f & FlushS) ? SFlushS | StraightS : StraightS;
+      score = f | (v << 3) | (v << 2); // At least 2 bit for ScoreMask
+    }
   }
 
   void do_score() {
 
-    // is_flush() and is_straight() map values into Rank1BB
-    if (is_flush())
-      score |= FlushS;
-
-    if (is_straight())
-      score |= StraightS;
-
-    // Straight-flush
-    if ((score & (FlushS | StraightS)) == (FlushS | StraightS))
-      score |= SFlushS;
+    // check_flush() and check_straight() map score into Rank1BB and
+    // set the corresponding flags if needed.
+    check_flush();
+    check_straight();
 
     // Drop all bits below the set ones so that msb()
     // returns values on different files.
-    uint64_t b = values ^ (values >> 16);
+    uint64_t b = (score ^ (score >> 16)) & ~FLAGS_AREA;
 
     // Mask out needed bits to get the score
     unsigned cnt = pop_msb(&b) << 6;
     b = ScoreMask[cnt + msb(b)];
-    score |= (values | FullHS) & b;
+    score = (score | FullHS) & b;
 
     // Drop the lowest cards so that 5 remains
     cnt = (unsigned(b) >> 13) & 0x7;
-    uint64_t v = score & Rank1BB;
-    unsigned p = popcount(v);
+    unsigned p = popcount(score & Rank1BB);
     while (p-- > cnt)
       score &= score - 1;
   }

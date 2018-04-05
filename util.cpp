@@ -164,7 +164,7 @@ ostream &operator<<(ostream &os, Card c) {
 ostream &operator<<(ostream &os, const Hand &h) {
 
   vector<Card> cards;
-  uint64_t v = h.colors;
+  uint64_t v = h.cards;
 
   while (v)
     cards.push_back(Card(pop_lsb(&v)));
@@ -177,11 +177,10 @@ ostream &operator<<(ostream &os, const Hand &h) {
   for (Card c : cards)
     os << c;
 
-  os << "\n" << pretty_hand(h.colors, true) << "\n";
+  os << "\n" << pretty_hand(h.cards, true) << "\n";
 
   if (h.score)
-    os << "\nScore: (" << Flags(h.flags) << ")\n"
-       << pretty_hand(h.score, false) << "\n";
+    os << "\nScore:\n" << pretty_hand(h.score, false) << "\n";
 
   return os;
 }
@@ -192,7 +191,7 @@ std::ostream &operator<<(std::ostream &os, const Spot &s) {
 
   os << "Spot: " << np << " ";
 
-  uint64_t common = s.hands[0].colors & s.hands[1].colors;
+  uint64_t common = s.hands[0].cards & s.hands[1].cards;
 
   // Additional debug info
   //
@@ -230,7 +229,8 @@ struct Hash {
 
 void bench(istringstream &is) {
 
-  const int NumGames = 500 * 1000;
+  constexpr uint64_t GoodSig = 12790484233274363185ULL;
+  constexpr int NumGames = 500 * 1000;
 
   Threads.set(0); // Re-init prng for each thread
 
@@ -269,5 +269,10 @@ void bench(istringstream &is) {
        << "\nHands served (M): " << hands / 1000000
        << "\nSpots played (M): " << spots / 1000000
        << "\nSpots/second    : " << 1000 * spots / elapsed
-       << "\nSignature       : " << sig.get() << endl;
+       << "\nSignature       : " << sig.get();
+
+  if (sig.get() == GoodSig)
+    cerr << " (OK)" << endl;
+  else
+    cerr << " (FAIL)" << endl;
 }
