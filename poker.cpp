@@ -54,7 +54,9 @@ Spot::Spot(const std::string &pos) {
   memset(fill, 0, sizeof(fill));
   memset(givenHoles, 0, sizeof(givenHoles));
   memset(hands, 0, sizeof(hands));
+
   givenCommon = Hand();
+  givenCommon.colors = COLOR_INIT; // Only givenCommon is set
   prng = nullptr;
   ready = false;
 

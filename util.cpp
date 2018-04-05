@@ -236,7 +236,7 @@ void bench(istringstream &is) {
 
   unsigned results[10];
   string token;
-  uint64_t hands = 0, spots = 0, cnt = 1;
+  uint64_t cards = 0, spots = 0, cnt = 1;
   Hash sig;
 
   int threadsNum = (is >> token) ? stoi(token) : 1;
@@ -257,7 +257,7 @@ void bench(istringstream &is) {
 
     print_results(results, s.players());
 
-    hands += NumGames * s.players();
+    cards += NumGames * (s.players() * 2 + 5);
     spots += NumGames;
   }
 
@@ -266,8 +266,8 @@ void bench(istringstream &is) {
 
   cerr << "\n==========================="
        << "\nTotal time  (ms): " << elapsed
-       << "\nHands served (M): " << hands / 1000000
        << "\nSpots played (M): " << spots / 1000000
+       << "\nCards/second    : " << 1000 * cards / elapsed
        << "\nSpots/second    : " << 1000 * spots / elapsed
        << "\nSignature       : " << sig.get();
 
