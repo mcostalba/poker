@@ -12,12 +12,14 @@ extern void print_results(unsigned* results, size_t players);
 class PRNG {
 
   uint64_t s[2];
+  uint64_t *buf;
 
   void jump(void);
 
 public:
   PRNG(size_t idx, uint64_t seed = 0);
   uint64_t next();
+  void set_enum_buffer(uint64_t *b) { buf = b; }
 };
 
 

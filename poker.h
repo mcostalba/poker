@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <iostream>
 #include <string>
+#include <vector>
 
 #include "util.h"
 
@@ -135,6 +136,7 @@ class Spot {
   Hand hands[PLAYERS_NB];
   Hand givenCommon;
 
+  std::vector<uint64_t> enumBuf;
   PRNG *prng;
   size_t numPlayers;
   unsigned commonsNum;
@@ -147,9 +149,15 @@ public:
   Spot() = default;
   explicit Spot(const std::string &pos);
   void run(unsigned results[]);
-  void set_prng(PRNG *p) { prng = p; }
+  size_t set_enumerate_mode();
+
   bool valid() const { return ready; }
   size_t players() const { return numPlayers; }
+  void set_prng(PRNG *p) {
+    assert(p);
+    prng = p;
+    prng->set_enum_buffer(enumBuf.size() ? enumBuf.data() : nullptr);
+  }
 };
 
 #endif // #ifndef POKER_H_INCLUDED

@@ -40,6 +40,10 @@ static inline uint64_t rotl(const uint64_t x, int k) {
 }
 
 uint64_t PRNG::next() {
+
+    if (buf)
+        return *buf++;
+
     const uint64_t s0 = s[0];
     uint64_t s1 = s[1];
     const uint64_t result = s0 + s1;
@@ -52,6 +56,7 @@ uint64_t PRNG::next() {
 }
 
 PRNG::PRNG(size_t idx, uint64_t seed) {
+    buf = nullptr;
     s[0] = seed ? seed : 0x4209920184674cbfULL;
     s[1] = 0;
     next();

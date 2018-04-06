@@ -9,6 +9,10 @@
 
 using namespace std;
 
+// 2p QhQs As4h - 5h 6s 7d 4d
+// Equity: 74%  25%
+// Equity Poker Strategy: 79.54%  20.46%
+
 void set_threads(istringstream &is) {
 
   string token;
@@ -31,7 +35,28 @@ void go(istringstream &is) {
 
   unsigned results[10];
   memset(results, 0, sizeof(results));
-  Threads.run(s, 500 * 1000, results);
+  Threads.run(s, 1000 * 1000, results);
+  print_results(results, s.players());
+}
+
+void enumerate(istringstream &is) {
+
+  string token, pos;
+
+  while (is >> token)
+    pos += token + " ";
+
+  Spot s(pos);
+  if (!s.valid()) {
+    cerr << "Error in: " << pos << endl;
+    return;
+  }
+
+  auto size = s.set_enumerate_mode();
+
+  unsigned results[10];
+  memset(results, 0, sizeof(results));
+  Threads.run(s, size, results);
   print_results(results, s.players());
 }
 
@@ -61,6 +86,8 @@ int main(int argc, char *argv[]) {
       set_threads(is);
     else if (token == "go")
       go(is);
+    else if (token == "enum")
+      enumerate(is);
     else if (token == "bench")
       bench(is);
     else
