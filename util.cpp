@@ -2,6 +2,7 @@
 #include <cassert>
 #include <chrono>
 #include <cstring>
+#include <iomanip>
 #include <iostream>
 #include <sstream>
 #include <vector>
@@ -211,7 +212,7 @@ void print_results(unsigned *results, size_t players) {
 
   cout << "Equity: ";
   for (size_t p = 0; p < players; p++)
-    cout << (results[p] * 100) / sum << "%  ";
+    cout << std::setprecision(4) << float(results[p] * 100) / sum << "%  ";
   cout << endl;
 }
 
@@ -229,7 +230,7 @@ struct Hash {
 
 void bench(istringstream &is) {
 
-  constexpr uint64_t GoodSig = 12790484233274363185ULL;
+  constexpr uint64_t GoodSig = 3223224699306061300ULL;
   constexpr int NumGames = 500 * 1000;
 
   Threads.set(0); // Re-init prng for each thread

@@ -101,6 +101,7 @@ Spot::Spot(const std::string &pos) {
 void Spot::run(unsigned results[]) {
 
   uint64_t maxScore = 0;
+  bool split = false;
   Hand common = givenCommon;
 
   unsigned cnt = 5 - commonsNum;
@@ -128,14 +129,17 @@ void Spot::run(unsigned results[]) {
 
     hands[i].do_score();
 
-    if (maxScore < hands[i].score)
+    if (maxScore < hands[i].score) {
       maxScore = hands[i].score;
+      split = false;
+    } else if (maxScore == hands[i].score)
+      split = true;
   }
 
-  // Credit the winner, considering split results
+  // Credit the winner 2 points, split result 1 point
   for (size_t i = 0; i < numPlayers; ++i) {
     if (hands[i].score == maxScore)
-      results[i]++;
+      results[i] += split ? 1 : 2;
   }
 }
 

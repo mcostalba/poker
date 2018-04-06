@@ -9,10 +9,6 @@
 
 using namespace std;
 
-// 2p QhQs As4h - 5h 6s 7d 4d
-// Equity: 74%  25%
-// Equity Poker Strategy: 79.54%  20.46%
-
 void set_threads(istringstream &is) {
 
   string token;
