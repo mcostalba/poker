@@ -56,7 +56,7 @@ uint64_t up_to(uint64_t b) {
 
 void init_score_mask() {
 
-  uint64_t Fixed = FullHS | to_pick(7);
+  uint64_t Fixed = FullHS | DPairS | to_pick(7);
 
   for (unsigned c1 = 0; c1 < 64; c1++) {
 
@@ -84,7 +84,7 @@ void init_score_mask() {
       // Double Pair (there could be also a third one that is dropped)
       else if ((bh & Rank2BB) && (bl & Rank2BB)) {
         ScoreMask[idx] =
-            ~(Fixed | below(bh) | below(bl) | up_to(bl)) | to_pick(1);
+            ~(Fixed | below(bh) | below(bl) | up_to(bl)) | DPairS | to_pick(1);
       }
       // Set
       else if ((bh & Rank3BB) && (bl & Rank1BB)) {
@@ -230,8 +230,8 @@ struct Hash {
 
 void bench(istringstream &is) {
 
-  constexpr uint64_t GoodSig = 3223224699306061300ULL;
-  constexpr int NumGames = 500 * 1000;
+  constexpr uint64_t GoodSig = 12795375867761621917ULL;
+  constexpr int NumGames = 1000 * 1000;
 
   Threads.set(0); // Re-init prng for each thread
 

@@ -43,7 +43,8 @@ enum FlagScores : uint64_t {
   SFlushS = 1ULL << (16 * 3 + 15),
   FullHS = 1ULL << (16 * 2 + 15),
   FlushS = 1ULL << (16 * 2 + 14),
-  StraightS = 1ULL << (16 * 2 + 13)
+  StraightS = 1ULL << (16 * 2 + 13),
+  DPairS = 1ULL << (16 * 1 + 13)
 };
 
 constexpr uint64_t Rank1BB = 0xFFFFULL << (16 * 0);
@@ -107,6 +108,7 @@ struct Hand {
     v = (v << 1) | (v >> 12); // Duplicate an ace into first position
     v &= v >> 1, v &= v >> 1, v &= v >> 2;
     if (v) {
+      v = 1ULL << msb(v); // Could be more than 1 in case of straight > 5
       score &= FLAGS_AREA;
       score |= (score & FlushS) ? SFlushS | StraightS : StraightS;
       score |= (v << 3) | (v << 2); // At least 2 bit for ScoreMask
@@ -119,7 +121,7 @@ struct Hand {
     // Mask out needed bits to get the score
     unsigned cnt = pop_msb(&v) << 6;
     v = ScoreMask[cnt + msb(v)];
-    score = (score | FullHS) & v;
+    score = (score | FullHS | DPairS) & v;
 
     // Drop the lowest cards so that 5 remains
     cnt = (unsigned(v) >> 13) & 0x7;
