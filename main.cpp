@@ -13,7 +13,7 @@ void set_threads(istringstream &is) {
 
   string token;
   if (is >> token)
-      Threads.set(stoi(token));
+    Threads.set(stoi(token));
 }
 
 void go(istringstream &is) {
@@ -35,6 +35,23 @@ void go(istringstream &is) {
   print_results(results, s.players());
 }
 
+void eval(istringstream &is) {
+
+  string token, pos = "1P ";
+
+  while (is >> token)
+    pos += token + " ";
+
+  Spot s(pos);
+  if (!s.valid()) {
+    cerr << "Error in: " << pos << endl;
+    return;
+  }
+
+  cout << "Score is: " << s.eval() << "\n"
+       << pretty_hand(s.eval(), false) << endl;
+}
+
 void enumerate(istringstream &is) {
 
   string token, pos;
@@ -49,6 +66,8 @@ void enumerate(istringstream &is) {
   }
 
   auto size = s.set_enumerate_mode();
+  if (!size)
+    return;
 
   unsigned results[10];
   memset(results, 0, sizeof(results));
@@ -84,6 +103,8 @@ int main(int argc, char *argv[]) {
       go(is);
     else if (token == "enum")
       enumerate(is);
+    else if (token == "eval")
+      eval(is);
     else if (token == "bench")
       bench(is);
     else

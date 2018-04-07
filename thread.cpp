@@ -112,7 +112,7 @@ void ThreadPool::set(size_t requested) {
 
 void ThreadPool::run(const Spot& s, size_t gamesNum, unsigned results[]) {
 
-  size_t n = gamesNum / size();
+  size_t n = gamesNum < size() ? 1 : gamesNum / size();
 
   for (Thread* th : *this) {
       th->set_spot(s, n);

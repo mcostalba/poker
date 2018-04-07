@@ -154,6 +154,7 @@ public:
   size_t set_enumerate_mode();
 
   bool valid() const { return ready; }
+  uint64_t eval() const {return givenCommon.score; }
   size_t players() const { return numPlayers; }
   void set_prng(PRNG *p) {
     assert(p);
