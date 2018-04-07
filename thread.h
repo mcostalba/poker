@@ -28,9 +28,8 @@
 #include <vector>
 
 #include "poker.h"
-#include "util.h"
 #include "thread_win32.h"
-
+#include "util.h"
 
 /// Thread class keeps together all the thread-related stuff. We use
 /// per-thread pawn and material hash tables so that once we get a
@@ -39,30 +38,31 @@
 
 class Thread {
 
-  Mutex mutex;
-  ConditionVariable cv;
-  bool exit = false, searching = true; // Set before starting std::thread
-  std::thread stdThread;
+    Mutex mutex;
+    ConditionVariable cv;
+    bool exit = false, searching = true; // Set before starting std::thread
+    std::thread stdThread;
 
-  PRNG prng;
-  Spot spot;
-  unsigned results[10];
-  size_t gamesNum;
+    PRNG prng;
+    Spot spot;
+    unsigned results[10];
+    size_t gamesNum;
 
 public:
-  explicit Thread(size_t);
-  ~Thread();
-  void idle_loop();
-  void start_searching();
-  void wait_for_search_finished();
+    explicit Thread(size_t);
+    ~Thread();
+    void idle_loop();
+    void start_searching();
+    void wait_for_search_finished();
 
-  void run();
-  unsigned result(size_t p) const { return results[p]; }
-  void set_spot(const Spot& s, size_t n) {
-    spot = s;
-    gamesNum = n;
-    spot.set_prng(&prng);
-  }
+    void run();
+    unsigned result(size_t p) const { return results[p]; }
+    void set_spot(const Spot& s, size_t n)
+    {
+        spot = s;
+        gamesNum = n;
+        spot.set_prng(&prng);
+    }
 };
 
 /// ThreadPool struct handles all the threads-related stuff like init, starting,
@@ -71,8 +71,8 @@ public:
 
 struct ThreadPool : public std::vector<Thread*> {
 
-  void set(size_t);
-  void run(const Spot& s, size_t, unsigned results[]);
+    void set(size_t);
+    void run(const Spot& s, size_t, unsigned results[]);
 };
 
 extern ThreadPool Threads;

@@ -27,102 +27,106 @@
 
 ThreadPool Threads; // Global object
 
-
 /// Thread constructor launches the thread and waits until it goes to sleep
 /// in idle_loop(). Note that 'searching' and 'exit' should be alredy set.
 
-Thread::Thread(size_t n) : stdThread(&Thread::idle_loop, this), prng(n) {
+Thread::Thread(size_t n)
+    : stdThread(&Thread::idle_loop, this)
+    , prng(n)
+{
 
-  wait_for_search_finished();
+    wait_for_search_finished();
 }
-
 
 /// Thread destructor wakes up the thread in idle_loop() and waits
 /// for its termination. Thread should be already waiting.
 
-Thread::~Thread() {
+Thread::~Thread()
+{
 
-  assert(!searching);
+    assert(!searching);
 
-  exit = true;
-  start_searching();
-  stdThread.join();
+    exit = true;
+    start_searching();
+    stdThread.join();
 }
-
 
 /// Thread::start_searching() wakes up the thread that will start the search
 
-void Thread::start_searching() {
+void Thread::start_searching()
+{
 
-  std::lock_guard<Mutex> lk(mutex);
-  searching = true;
-  cv.notify_one(); // Wake up the thread in idle_loop()
+    std::lock_guard<Mutex> lk(mutex);
+    searching = true;
+    cv.notify_one(); // Wake up the thread in idle_loop()
 }
-
 
 /// Thread::wait_for_search_finished() blocks on the condition variable
 /// until the thread has finished searching.
 
-void Thread::wait_for_search_finished() {
+void Thread::wait_for_search_finished()
+{
 
-  std::unique_lock<Mutex> lk(mutex);
-  cv.wait(lk, [&]{ return !searching; });
+    std::unique_lock<Mutex> lk(mutex);
+    cv.wait(lk, [&] { return !searching; });
 }
-
 
 /// Tstartop() is where the thread is parked, blocked on the
 /// condition variable, when it has no work to do.
 
-void Thread::idle_loop() {
+void Thread::idle_loop()
+{
 
-  while (true)
-  {
-      std::unique_lock<Mutex> lk(mutex);
-      searching = false;
-      cv.notify_one(); // Wake up anyone waiting for search finished
-      cv.wait(lk, [&]{ return searching; });
+    while (true) {
+        std::unique_lock<Mutex> lk(mutex);
+        searching = false;
+        cv.notify_one(); // Wake up anyone waiting for search finished
+        cv.wait(lk, [&] { return searching; });
 
-      if (exit)
-          return;
+        if (exit)
+            return;
 
-      lk.unlock();
+        lk.unlock();
 
-      run();
-  }
+        run();
+    }
 }
 
-void Thread::run() {
+void Thread::run()
+{
 
-  memset(results, 0, sizeof(results));
-  for (size_t i = 0; i < gamesNum; i++)
-      spot.run(results);
+    memset(results, 0, sizeof(results));
+    for (size_t i = 0; i < gamesNum; i++)
+        spot.run(results);
 }
 
 /// ThreadPool::set() creates/destroys threads to match the requested number.
 /// Created and launced threads wil go immediately to sleep in idle_loop.
 
-void ThreadPool::set(size_t requested) {
+void ThreadPool::set(size_t requested)
+{
 
-  while (size() > requested)
-      delete back(), pop_back();
+    while (size() > requested)
+        delete back(), pop_back();
 
-  while (size() < requested)
-      push_back(new Thread(size()));
+    while (size() < requested)
+        push_back(new Thread(size()));
 }
 
-void ThreadPool::run(const Spot& s, size_t gamesNum, unsigned results[]) {
+void ThreadPool::run(const Spot& s, size_t gamesNum, unsigned results[])
+{
 
-  size_t n = gamesNum < size() ? 1 : gamesNum / size();
+    size_t n = gamesNum < size() ? 1 : gamesNum / size();
 
-  for (Thread* th : *this) {
-      th->set_spot(s, n);
-      th->start_searching();
-  }
+    for (Thread* th : *this) {
+        th->set_spot(s, n);
+        th->start_searching();
+    }
 
-  for (Thread* th : *this)
-      th->wait_for_search_finished();
+    for (Thread* th : *this)
+        th->wait_for_search_finished();
 
-  for (Thread* th : *this)
-      for (size_t p = 0; p < s.players(); p++)
-          results[p] += th->result(p);
+    for (Thread* th : *this)
+        for (size_t p = 0; p < s.players(); p++)
+            results[p] += th->result(p);
 }
