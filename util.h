@@ -23,9 +23,6 @@ public:
 };
 
 
-void init_score_mask();
-extern uint64_t ScoreMask[4096];
-
 /// bench() runs a benchmark for speed and signature
 void bench(std::istringstream &is);
 

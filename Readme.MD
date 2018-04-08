@@ -32,13 +32,13 @@ Equity: 31.32%  21.55%  47.13%
 ### How it works?
 
 Instead of the usual hashing scheme, used by most evaluators, this tool is based
-on card bitboards. Any card in [0,52] range can be mapped into a bit of a 64 bit
+on card bitboards. Any card in [0,52] range can be mapped into a bit of a 64bit
 unsigned integer, we leverage on this to build a score through a sequence
 of bitwise operations, one for each card.
 
 Suppose we have this 7-card hand: **Ks Tc Th 8s 5h 4d 2d**
 
-After striping the suit, cards are mapped into a 64 bit _score_ like this:
+After striping the suit, cards are mapped into a 64bit _score_ like this:
 
 ```
     | 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10| 11| 12| 13| 14| 15|
@@ -59,13 +59,9 @@ and lowest 4 the value):
 ```C++
     uint64_t n = 1 << (card & 0xF);
 
-    while (true) {
-        if (!(score & n)) {
-            score |= n;
-            break;
-        }
+    while (score & n)
         n <<= 16;
-    }
+    score |= n;
 ```
 
 And this is *almost* our score: we can compare hands by a simple:
@@ -97,7 +93,7 @@ in a way that makes our score comparison to work correctly in all the cases.
 
 #### Flush and straight
 There is some special code for flushes and straights. For flushes we use a 32 bit
-integer split in 4 parts (4 bit  each), each one inited at 3, and we add 1 for
+integer split in 4 slots (4 bit  each), each one inited at 3, and we add 1 for
 every card according to card's suit. If one slot reaches 8, then we have a
 flush:
 
@@ -109,7 +105,7 @@ flush:
     suits = SuitInit;
 
     for ( <all cards> )
-        suits += SuitAdd[(card & 0x30) >> 4];
+        suits += SuitAdd[card >> 4];
 
     if (suits & IsFlush) {
        unsigned r = lsb(suits & IsFlush) / 4; // Suite value in [0..3]

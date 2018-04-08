@@ -55,7 +55,7 @@ Spot::Spot(const std::string& pos)
     memset(hands, 0, sizeof(hands));
 
     givenCommon = Hand();
-    givenCommon.colors = ColorInit; // Only givenCommon is set
+    givenCommon.suits = SuitInit; // Only givenCommon is set
     prng = nullptr;
     ready = false;
 
@@ -98,7 +98,7 @@ Spot::Spot(const std::string& pos)
         if (!parse_cards(token, givenCommon, all, singlePos ? 7 : 5))
             return;
 
-    allMask = all.cards | FLAGS_AREA;
+    allMask = all.cards | FlagsArea;
     commonsNum = popcount(givenCommon.cards);
     if (singlePos)
         givenCommon.do_score(); // Single position
@@ -188,7 +188,7 @@ static void enumerate(int missing, vector<uint64_t>& buf, vector<int>& set,
 
 size_t Spot::set_enumerate_mode()
 {
-    int given = popcount(allMask & ~FLAGS_AREA);
+    int given = popcount(allMask & ~FlagsArea);
     int missing = 5 + 2 * numPlayers - given;
     int deck = 52 - given;
     vector<int> set(missing);

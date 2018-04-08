@@ -58,22 +58,18 @@ uint64_t below(uint64_t b) { return (b >> 16) | (b >> 32) | (b >> 48); }
 uint64_t to_pick(unsigned n) { return n << 13; }
 uint64_t up_to(uint64_t b)
 {
-    if (b & Rank4BB)
-        return (b - 1) & Rank4BB;
-    if (b & Rank3BB)
-        return (b - 1) & Rank3BB;
-    if (b & Rank2BB)
-        return (b - 1) & Rank2BB;
-    if (b & Rank1BB)
-        return (b - 1) & Rank1BB;
-    return b;
+    for (int i = 4; i >= 0; --i)
+        if (b & RanksBB[i])
+            return (b - 1) & RanksBB[i];
+    assert(false);
+    return 0;
 }
 
 } // namespace
 
 void init_score_mask()
 {
-    uint64_t Fixed = FullHS | DPairS | to_pick(7);
+    const uint64_t Fixed = FullHouseBB | DoublePairBB | to_pick(7);
 
     for (unsigned c1 = 0; c1 < 64; c1++) {
 
@@ -87,43 +83,43 @@ void init_score_mask()
 
             unsigned idx = (c1 << 6) + c2;
 
-            uint64_t bh = 1ULL << c1;
-            uint64_t bl = 1ULL << c2;
+            uint64_t h = 1ULL << c1;
+            uint64_t l = 1ULL << c2;
 
             // High card
-            if (bh & Rank1BB) {
+            if (h & Rank1BB)
                 ScoreMask[idx] = ~Fixed | to_pick(5);
-            }
+
             // Pair
-            else if ((bh & Rank2BB) && (bl & Rank1BB)) {
-                ScoreMask[idx] = ~(Fixed | below(bh)) | to_pick(3);
-            }
+            else if ((h & Rank2BB) && (l & Rank1BB))
+                ScoreMask[idx] = ~(Fixed | below(h)) | to_pick(3);
+
             // Double Pair (there could be also a third one that is dropped)
-            else if ((bh & Rank2BB) && (bl & Rank2BB)) {
-                ScoreMask[idx] = ~(Fixed | below(bh) | below(bl) | up_to(bl)) | DPairS | to_pick(1);
-            }
+            else if ((h & Rank2BB) && (l & Rank2BB))
+                ScoreMask[idx] = ~(Fixed | below(h) | below(l) | up_to(l)) | DoublePairBB | to_pick(1);
+
             // Set
-            else if ((bh & Rank3BB) && (bl & Rank1BB)) {
-                ScoreMask[idx] = ~(Fixed | below(bh)) | to_pick(2);
-            }
+            else if ((h & Rank3BB) && (l & Rank1BB))
+                ScoreMask[idx] = ~(Fixed | below(h)) | to_pick(2);
+
             // Full house (there could be also a second pair that is dropped)
-            else if ((bh & Rank3BB) && (bl & Rank2BB)) {
-                ScoreMask[idx] = ~(Fixed | below(bh) | below(bl) | up_to(bl)) | FullHS | to_pick(0);
+            else if ((h & Rank3BB) && (l & Rank2BB)) {
+                ScoreMask[idx] = ~(Fixed | below(h) | below(l) | up_to(l)) | FullHouseBB | to_pick(0);
                 ScoreMask[idx] &= ~Rank1BB; // Drop all first line
             }
             // Double set: it's a full house, second set is counted as a pair
-            else if ((bh & Rank3BB) && (bl & Rank3BB)) {
-                ScoreMask[idx] = ~(Fixed | below(bh) | below(bl) | up_to(bh));
-                ScoreMask[idx] |= (bl >> 16) | FullHS | to_pick(0);
+            else if ((h & Rank3BB) && (l & Rank3BB)) {
+                ScoreMask[idx] = ~(Fixed | below(h) | below(l) | up_to(h));
+                ScoreMask[idx] |= (l >> 16) | FullHouseBB | to_pick(0);
                 ScoreMask[idx] &= ~Rank1BB; // Drop all first line
             }
             // Quad: drop anything else but first rank
-            else if ((bh & Rank4BB)) {
-                ScoreMask[idx] = ~(Fixed | below(bh) | up_to(bh) | Rank3BB | Rank2BB) | to_pick(1);
-            } else
+            else if ((h & Rank4BB))
+                ScoreMask[idx] = ~(Fixed | below(h) | up_to(h) | Rank3BB | Rank2BB) | to_pick(1);
+            else
                 assert(false);
         }
-    }
+   }
 }
 
 const string pretty_hand(uint64_t b, bool headers)
