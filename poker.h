@@ -133,8 +133,11 @@ class Spot {
     PRNG* prng;
     size_t numPlayers;
     unsigned commonsNum;
+    uint32_t enumMask;
     uint64_t allMask;
     bool ready;
+
+    void enumerate(int missing, std::vector<int>& set, int limit);
 
 public:
     Spot() = default;

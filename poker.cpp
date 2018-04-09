@@ -56,6 +56,7 @@ Spot::Spot(const std::string& pos)
 
     givenCommon = Hand();
     givenCommon.suits = SuitInit; // Only givenCommon is set
+    enumMask = 0;
     prng = nullptr;
     ready = false;
 
@@ -83,12 +84,16 @@ Spot::Spot(const std::string& pos)
                 return;
 
             // Populate fill vector with missing cards to reach hole number
-            for (int i = 0; i < 2 - popcount(givenHoles[n].cards); ++i)
+            for (int i = 0; i < 2 - popcount(givenHoles[n].cards); ++i) {
                 *f++ = n;
+                enumMask = (enumMask << 1) | !!(i == 0);
+            }
         }
         // Populate fill vector for missing players
-        for (int i = n + 1; i < int(numPlayers); ++i)
+        for (int i = n + 1; i < int(numPlayers); ++i) {
             *f++ = i, *f++ = i;
+            enumMask = (enumMask << 2) | 2;
+        }
         *f = -1; // EOL
     }
 
@@ -100,6 +105,9 @@ Spot::Spot(const std::string& pos)
 
     allMask = all.cards | FlagsArea;
     commonsNum = popcount(givenCommon.cards);
+    int rndCommons = 5 - commonsNum;
+    if (rndCommons) // Append commons
+        enumMask |= (1 << (rndCommons + (enumMask ? msb(enumMask) : -1)));
     if (singlePos)
         givenCommon.do_score(); // Single position
     ready = true;
@@ -151,57 +159,72 @@ void Spot::run(unsigned results[])
     }
 }
 
-static void enumerate(int missing, vector<uint64_t>& buf, vector<int>& set,
-    unsigned commons, uint64_t all)
+// Recursively compute all possible combinations (not permutations) of missing
+// cards for each group of hole and common cards.
+void Spot::enumerate(int missing, vector<int>& set, int limit)
 {
     if (missing == 0) {
-        if (commons) {
+        auto rndCommons = 5 - commonsNum;
+        if (rndCommons) {
             uint64_t n = 0;
-            for (size_t i = 0; i < commons; ++i)
+            for (size_t i = 0; i < rndCommons; ++i)
                 n = (n << 6) + set[i];
-            buf.push_back(n);
+            enumBuf.push_back(n);
         }
-
-        if (set.size() > commons) {
+        if (set.size() > rndCommons) {
             uint64_t n = 0;
-            for (size_t i = commons; i < set.size(); ++i)
+            for (size_t i = rndCommons; i < set.size(); ++i)
                 n = (n << 6) + set[i];
-            buf.push_back(n);
+            enumBuf.push_back(n);
         }
         return;
     }
 
-    for (int c = 0; c < 64; ++c) {
+    // At group boundaries enumMask is 1. We reset to 64 in this case
+    auto end = (enumMask & (1 << (missing - 1))) ? 64 : limit;
+    auto idx = set.size() - missing;
+
+    for (int c = 0; c < end; ++c) {
 
         uint64_t n = 1ULL << c;
 
-        if (all & n)
+        if (allMask & n)
             continue;
 
-        set[set.size() - missing] = c;
+        set[idx] = c;
 
-        all |= n;
-        enumerate(missing - 1, buf, set, commons, all);
-        all ^= n;
+        allMask |= n;
+        enumerate(missing - 1, set, c);
+        allMask ^= n;
     }
 }
+
+// FIXME still different from pokerstove here:
+// ./poker go -e -p 4 Ks5h 5s3h - Qh Qs Jc 5d
+// ./poker go -e -p 3 Ks5h 6c5c - QsQc2d
 
 size_t Spot::set_enumerate_mode()
 {
     int given = popcount(allMask & ~FlagsArea);
     int missing = 5 + 2 * numPlayers - given;
-    int deck = 52 - given;
+    int rndCommons = 5 - commonsNum;
     vector<int> set(missing);
 
-    if (missing > 4) {
-        cout << "Missing too many cards (" << missing << "), max is 4" << endl;
+    if (!missing)
+        return 0;
+
+    if (missing > 5) {
+        cout << "Missing too many cards (" << missing << "), max is 5" << endl;
         return 0;
     }
+    enumerate(missing, set, 64);
+    size_t size = enumBuf.size();
 
-    int num = 1;
-    for (int i = 0; i < missing; ++i)
-        num *= deck--;
+    // We have 2 entries for game in enumBuf (instead of 1) if we have to fill
+    // both common and hole cards, so halve size in this case.
+    if (rndCommons && missing > rndCommons)
+        size /= 2;
 
-    enumerate(missing, enumBuf, set, 5 - commonsNum, allMask);
-    return num;
+    cout << "Evaluating " << size << " combinations..." << endl;
+    return size;
 }
