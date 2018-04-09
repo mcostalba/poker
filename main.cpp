@@ -5,13 +5,12 @@
 #include <string>
 
 #include "poker.h"
-#include "thread.h"
 #include "util.h"
 
 using namespace std;
 
 static string parse_args(istringstream& is, size_t& players,
-    size_t& gamesNum, bool& enumerate)
+    size_t& gamesNum, size_t& threadsNum, bool& enumerate)
 {
     enum States {
         Option,
@@ -54,8 +53,7 @@ static string parse_args(istringstream& is, size_t& players,
 
     // Process options
     enumerate = (args["e"] == "true");
-
-    Threads.set(args["t"].size() ? stoi(args["t"]) : 1);
+    threadsNum = args["t"].size() ? stoi(args["t"]) : 1;
 
     if (args["p"].size())
         players = stoi(args["p"]);
@@ -79,9 +77,9 @@ static string parse_args(istringstream& is, size_t& players,
 
 void go(istringstream& is)
 {
-    size_t players = 0, gamesNum;
+    size_t players = 0, gamesNum, threadsNum;
     bool enumerate = false;
-    string pos = parse_args(is, players, gamesNum, enumerate);
+    string pos = parse_args(is, players, gamesNum, threadsNum, enumerate);
 
     Spot s(pos);
     if (!s.valid()) {
@@ -92,17 +90,17 @@ void go(istringstream& is)
     if (enumerate && (gamesNum = s.set_enumerate_mode()) == 0)
         return;
 
-    unsigned results[10];
+    unsigned results[PLAYERS_NB];
     memset(results, 0, sizeof(results));
-    Threads.run(s, gamesNum, results);
+    run(s, gamesNum, threadsNum, results);
     print_results(results, players);
 }
 
 void eval(istringstream& is)
 {
-    size_t players = 1, gamesNum;
+    size_t players = 1, gamesNum, threadsNum;
     bool enumerate;
-    string pos = parse_args(is, players, gamesNum, enumerate);
+    string pos = parse_args(is, players, gamesNum, threadsNum, enumerate);
 
     Spot s(pos);
     if (players != 1 || !s.valid()) {
@@ -117,7 +115,6 @@ void eval(istringstream& is)
 int main(int argc, char* argv[])
 {
     init_score_mask();
-    Threads.set(1);
 
     string token, cmd;
 

@@ -5,10 +5,10 @@
 #include <iomanip>
 #include <iostream>
 #include <sstream>
+#include <thread>
 #include <vector>
 
 #include "poker.h"
-#include "thread.h"
 #include "util.h"
 
 using namespace std;
@@ -65,7 +65,59 @@ uint64_t up_to(uint64_t b)
     return 0;
 }
 
+class Thread {
+
+    PRNG prng;
+    Spot spot;
+    size_t gamesNum;
+    std::thread* th;
+    unsigned results[PLAYERS_NB];
+
+public:
+    unsigned result(size_t p) const { return results[p]; }
+
+    Thread(size_t idx, const Spot& s, size_t n)
+        : prng(idx)
+        , spot(s)
+        , gamesNum(n)
+    {
+
+        memset(results, 0, sizeof(results));
+        spot.set_prng(&prng);
+        th = new std::thread(&Thread::run, this);
+    }
+
+    void join()
+    {
+        th->join();
+        delete th;
+    }
+
+    void run()
+    {
+        for (size_t i = 0; i < gamesNum; i++)
+            spot.run(results);
+    }
+};
+
 } // namespace
+
+void run(const Spot& s, size_t gamesNum, size_t threadsNum, unsigned results[])
+{
+    std::vector<Thread*> threads;
+
+    size_t n = gamesNum < threadsNum ? 1 : gamesNum / threadsNum;
+
+    for (size_t i = 0; i < threadsNum; ++i)
+        threads.push_back(new Thread(i, s, n));
+
+    for (Thread* th : threads) {
+        th->join();
+        for (size_t p = 0; p < s.players(); p++)
+            results[p] += th->result(p);
+        delete th;
+    }
+}
 
 void init_score_mask()
 {
@@ -119,7 +171,7 @@ void init_score_mask()
             else
                 assert(false);
         }
-   }
+    }
 }
 
 const string pretty_hand(uint64_t b, bool headers)
@@ -193,18 +245,15 @@ void print_results(unsigned* results, size_t players)
 
 void bench(istringstream& is)
 {
-    constexpr uint64_t GoodSig = 12795375867761621917ULL;
-    constexpr int NumGames = 1000 * 1000;
+    constexpr uint64_t GoodSig = 207978494542465489ULL;
+    constexpr int NumGames = 1500 * 1000;
 
-    Threads.set(0); // Re-init prng for each thread
-
-    unsigned results[10];
+    unsigned results[PLAYERS_NB];
     string token;
     uint64_t cards = 0, spots = 0, cnt = 1;
     Hash sig;
 
     int threadsNum = (is >> token) ? stoi(token) : 1;
-    Threads.set(threadsNum);
 
     TimePoint elapsed = now();
 
@@ -213,7 +262,7 @@ void bench(istringstream& is)
         cout << "\nP" << cnt++ << ": " << v;
         memset(results, 0, sizeof(results));
         Spot s(v);
-        Threads.run(s, NumGames, results);
+        run(s, NumGames, threadsNum, results);
 
         for (size_t p = 0; p < s.players(); p++)
             sig << results[p];

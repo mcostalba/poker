@@ -154,4 +154,6 @@ public:
     }
 };
 
+extern void run(const Spot& s, size_t games, size_t threads, unsigned results[]);
+
 #endif // #ifndef POKER_H_INCLUDED
