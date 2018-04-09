@@ -9,23 +9,43 @@ A simulation of a 2 player table with *Qh Qs* vs *Ad Jc* runs at **8.6 Milions
 games/sec** on a quite old Intel I5 2.6GHz, single core. Tool supports multi-threading,
 using 4 cores speed is almost 4X.
 
+It has been fully validated for correctness against
+[SKPokerEval](https://github.com/kennethshackleton/SKPokerEval).
+
 
 ### Usage
 
 Simply call with _go_ command and the given cards, like:
 
 ```
-$ ./poker go 2P AcKd 7h7s             ; 2 players table with given hole cards
+; 2 players table with given hole cards
+$ ./poker go AcKd 7h7s
 Equity: 44.59%  55.41%
 
-$ ./poker go 2P 3d                    ; 2 players, first one has a 3 of diamond
-Equity: 42.5%  57.5%
+; 4 threads and 2 players, first one has a 3 of diamond
+$ ./poker go -t 4 -p 2 3d
+Equity: 42.67%  57.33%
 
-$ ./poker go 3P KhKs - 8c 4d 7c Ts Qs ; 3 players, first one has pocket kings, board is given
-Equity: 70.39%  14.8%  14.8%
+; 3 players and 10M games, player one has pocket kings, board is given
+$ ./poker go -p 3 -g 10M KhKs - 8c 4d 7c Ts Qs
+Equity: 70.37%  14.84%  14.79%
 
-$ ./poker go 3P Ac Td 7h - 5h 6h 9c   ; 3 players, each one with a given hole card and 5h 6h 9c flop
-Equity: 31.32%  21.55%  47.13%
+; 3 players, each one with a given hole card. Full enumerate instead of Monte Carlo
+$ ./poker go -e Ac Td 7h - 5h 6h 9c Qs
+Equity: 34.66%  25.36%  39.97%
+```
+
+
+This is the option list:
+
+```
+  -p X  With X number of players. Default to number of holes
+
+  -t X  With X number of threads. Default to 1
+
+  -g X  With X number of games, like 10000, 150K, 8M. Default to 1M
+
+  -e    Full enumerate instead of running a Monte Carlo
 ```
 
 
