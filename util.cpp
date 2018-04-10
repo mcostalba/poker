@@ -71,10 +71,10 @@ class Thread {
     Spot spot;
     size_t gamesNum;
     std::thread* th;
-    unsigned results[PLAYERS_NB];
+    Result results[PLAYERS_NB];
 
 public:
-    unsigned result(size_t p) const { return results[p]; }
+    Result result(size_t p) const { return results[p]; }
 
     Thread(size_t idx, const Spot& s, size_t n)
         : prng(idx)
@@ -102,7 +102,7 @@ public:
 
 } // namespace
 
-void run(const Spot& s, size_t gamesNum, size_t threadsNum, unsigned results[])
+void run(const Spot& s, size_t gamesNum, size_t threadsNum, Result results[])
 {
     std::vector<Thread*> threads;
 
@@ -113,8 +113,10 @@ void run(const Spot& s, size_t gamesNum, size_t threadsNum, unsigned results[])
 
     for (Thread* th : threads) {
         th->join();
-        for (size_t p = 0; p < s.players(); p++)
-            results[p] += th->result(p);
+        for (size_t p = 0; p < s.players(); p++) {
+            results[p].first += th->result(p).first;
+            results[p].second += th->result(p).second;
+        }
         delete th;
     }
 }
@@ -231,24 +233,28 @@ ostream& operator<<(ostream& os, const Hand& h)
     return os;
 }
 
-void print_results(unsigned* results, size_t players)
+void print_results(Result* results, size_t players, size_t games)
 {
-    size_t sum = 0;
-    for (size_t p = 0; p < players; p++)
-        sum += results[p];
+    cout << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2)
+         << "\n     Equity    Win     Tie   Pots won  Pots tied\n";
 
-    cout << "Equity: ";
-    for (size_t p = 0; p < players; p++)
-        cout << std::setprecision(4) << results[p] * 100.0 / sum << "%  ";
-    cout << endl;
+    for (size_t p = 0; p < players; p++) {
+        cout << "P" << p+1 << ": ";
+        size_t v = KTie * results[p].first + results[p].second;
+        cout << std::setw(6) << v * 100.0 / KTie / games << "% "
+             << std::setw(6) << results[p].first * 100.0 / games << "% "
+             << std::setw(6) << results[p].second * 100.0 / KTie / games << "% "
+             << std::setw(9) << results[p].first << " "
+             << std::setw(9) << double(results[p].second) / KTie << endl;
+    }
 }
 
 void bench(istringstream& is)
 {
-    constexpr uint64_t GoodSig = 207978494542465489ULL;
-    constexpr int NumGames = 1500 * 1000;
+    constexpr uint64_t GoodSig = 11714201772365687243ULL;
+    constexpr int GamesNum = 1500 * 1000;
 
-    unsigned results[PLAYERS_NB];
+    Result results[PLAYERS_NB];
     string token;
     uint64_t cards = 0, spots = 0, cnt = 1;
     Hash sig;
@@ -259,19 +265,18 @@ void bench(istringstream& is)
 
     for (const string& v : Defaults) {
 
-        cout << "\nP" << cnt++ << ": " << v;
+        cerr << "\nPosition " << cnt++ << ": " << v << endl;
         memset(results, 0, sizeof(results));
         Spot s(v);
-        run(s, NumGames, threadsNum, results);
+        run(s, GamesNum, threadsNum, results);
 
         for (size_t p = 0; p < s.players(); p++)
-            sig << results[p];
-        cout << "\n";
+            sig << results[p].first + results[p].second;
 
-        print_results(results, s.players());
+        print_results(results, s.players(), GamesNum);
 
-        cards += NumGames * (s.players() * 2 + 5);
-        spots += NumGames;
+        cards += GamesNum * (s.players() * 2 + 5);
+        spots += GamesNum;
     }
 
     elapsed = now() - elapsed + 1; // Ensure positivity to avoid a 'divide by zero'

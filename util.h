@@ -6,8 +6,13 @@
 #include <cstdint>
 #include <string>
 
+typedef std::pair<unsigned, unsigned> Result;
+
+/// A constant divisible by 2,3,4,5,6 used to compute split results
+constexpr unsigned KTie = 60;
+
 extern const std::string pretty_hand(uint64_t b, bool headers);
-extern void print_results(unsigned* results, size_t players);
+extern void print_results(Result* results, size_t players, size_t games);
 
 class PRNG {
 

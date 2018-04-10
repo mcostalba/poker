@@ -90,10 +90,10 @@ void go(istringstream& is)
     if (enumerate && (gamesNum = s.set_enumerate_mode()) == 0)
         return;
 
-    unsigned results[PLAYERS_NB];
+    Result results[PLAYERS_NB];
     memset(results, 0, sizeof(results));
     run(s, gamesNum, threadsNum, results);
-    print_results(results, players);
+    print_results(results, players, gamesNum);
 }
 
 void eval(istringstream& is)

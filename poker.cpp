@@ -114,10 +114,10 @@ Spot::Spot(const std::string& pos)
 }
 
 // Run a single spot and update results vector
-void Spot::run(unsigned results[])
+void Spot::run(Result results[])
 {
     uint64_t maxScore = 0;
-    bool split = false;
+    unsigned split = 0;
     Hand common = givenCommon;
 
     unsigned cnt = 5 - commonsNum;
@@ -147,15 +147,19 @@ void Spot::run(unsigned results[])
 
         if (maxScore < hands[i].score) {
             maxScore = hands[i].score;
-            split = false;
+            split = 0;
         } else if (maxScore == hands[i].score)
-            split = true;
+            split++;
     }
 
     // Credit the winner 2 points, split result 1 point
     for (size_t i = 0; i < numPlayers; ++i) {
-        if (hands[i].score == maxScore)
-            results[i] += split ? 1 : 2;
+        if (hands[i].score == maxScore) {
+            if (!split)
+                results[i].first++;
+            else
+                results[i].second += KTie / (split + 1);
+        }
     }
 }
 
@@ -198,10 +202,6 @@ void Spot::enumerate(int missing, vector<int>& set, int limit)
         allMask ^= n;
     }
 }
-
-// FIXME still different from pokerstove here:
-// ./poker go -e -p 4 Ks5h 5s3h - Qh Qs Jc 5d
-// ./poker go -e -p 3 Ks5h 6c5c - QsQc2d
 
 size_t Spot::set_enumerate_mode()
 {

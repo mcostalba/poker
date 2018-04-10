@@ -142,7 +142,7 @@ class Spot {
 public:
     Spot() = default;
     explicit Spot(const std::string& pos);
-    void run(unsigned results[]);
+    void run(Result results[]);
     size_t set_enumerate_mode();
 
     bool valid() const { return ready; }
@@ -157,6 +157,6 @@ public:
     }
 };
 
-extern void run(const Spot& s, size_t games, size_t threads, unsigned results[]);
+extern void run(const Spot& s, size_t games, size_t threads, Result results[]);
 
 #endif // #ifndef POKER_H_INCLUDED
