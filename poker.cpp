@@ -10,10 +10,11 @@
 
 using namespace std;
 
+// Parse a string token with one or more consecutive cards into a Hand
 static bool parse_cards(const string& token, Hand& h, Hand& all, unsigned max)
 {
     const string Values = "23456789TJQKA";
-    const string Colors = "dhcs";
+    const string Suites = "dhcs";
     size_t v, c;
 
     // Should be even number of chars (2 per card) and not exceeding the max
@@ -22,12 +23,13 @@ static bool parse_cards(const string& token, Hand& h, Hand& all, unsigned max)
 
     for (size_t i = 0; i < token.length(); i += 2) {
 
-        if ((v = Values.find(token[i])) == string::npos || (c = Colors.find(token[i + 1])) == string::npos)
+        if (   (v = Values.find(token[i])) == string::npos
+            || (c = Suites.find(token[i + 1])) == string::npos)
             return false;
 
         Card card = Card(16 * c + v);
 
-        if (!all.add(card, 0))
+        if (!all.add(card, 0)) // Double card
             return false;
 
         if (!h.add(card, 0)) {
@@ -38,31 +40,32 @@ static bool parse_cards(const string& token, Hand& h, Hand& all, unsigned max)
     return true;
 }
 
-// Initializes a spot from a given setup like:
-//
-//   4P AcTc TdTh - 5h 6h 9c
-//
-// That is 4 players, first 2 with AcTc and TdTh and
-// with flopped common cards 5h 6h 9c.
+/// Initialize a Spot from a given string like:
+///
+///  4P AcTc TdTh - 5h 6h 9c
+///  1P Ac Tc Td Th 5h 6h 9c
+///
+/// First is 4 players, first 2 with AcTc and TdTh and with board cards 5h 6h 9c.
+/// Second is a 7-card hand evaluation.
 Spot::Spot(const std::string& pos)
 {
     Hand all = Hand();
     string token;
     stringstream ss(pos);
 
-    memset(fill, 0, sizeof(fill));
+    memset(missingHolesId, 0, sizeof(missingHolesId));
     memset(givenHoles, 0, sizeof(givenHoles));
     memset(hands, 0, sizeof(hands));
 
     givenCommon = Hand();
-    givenCommon.suits = SuitInit; // Only givenCommon is set
-    enumMask = 0;
+    givenCommon.suits = SuitInit; // Only givenCommon is set with SuitInit
     prng = nullptr;
+    enumMask = 0;
     ready = false;
 
     ss >> skipws >> token;
 
-    // Parse 4P -> 4 players table
+    // Parse number of players
     if (token.length() != 2 || tolower(token[1]) != 'p')
         return;
 
@@ -70,57 +73,65 @@ Spot::Spot(const std::string& pos)
     if (numPlayers < 1 || numPlayers > 9)
         return;
 
-    bool singlePos = (numPlayers == 1);
+    // In case of a 7 cards fixed hand evaluation players are set to 1
+    bool fixedHand = (numPlayers == 1);
 
-    // Parse spot setup like AcTc TdTh - 5h 6h 9c
-    //
-    // Or single positions like Ac Tc Td Th 5h 6h 9c
-    //
     // First hole cards. One token per player, up to 2 cards per token
-    if (!singlePos) {
-        int n = -1, *f = fill;
+    if (!fixedHand) {
+        int n = -1, *mi = missingHolesId;
         while (ss >> token && token != "-") {
             if (!parse_cards(token, givenHoles[++n], all, 2))
                 return;
 
-            // Populate fill vector with missing cards to reach hole number
-            for (int i = 0; i < 2 - popcount(givenHoles[n].cards); ++i) {
-                *f++ = n;
-                enumMask = (enumMask << 1) | !!(i == 0);
+            assert(givenHoles[n].cards);
+
+            // Add to missingHolesId[] the hole's index for the missing card
+            // and update enumMask setting this hole's group boundary.
+            if (popcount(givenHoles[n].cards) < 2) {
+                *mi++ = n;
+                enumMask = (enumMask << 1) | 1;
             }
         }
-        // Populate fill vector for missing players
+        // Populate missingHolesId[] and enumMask for the missing hole card
+        // pairs up to the number of given players.
         for (int i = n + 1; i < int(numPlayers); ++i) {
-            *f++ = i, *f++ = i;
+            *mi++ = i, *mi++ = i;
             enumMask = (enumMask << 2) | 2;
         }
-        *f = -1; // EOL
+        *mi = -1; // Set EOF
     }
 
-    // Then common cards up to 5 (or 7 in case of single position),
-    // split or in a single token.
+    // Then remaining common cards up to 5 (or 7 in case of a fixed hand)
     while (ss >> token)
-        if (!parse_cards(token, givenCommon, all, singlePos ? 7 : 5))
+        if (!parse_cards(token, givenCommon, all, fixedHand ? 7 : 5))
             return;
 
+    if (fixedHand) {
+        if (popcount(givenCommon.cards) != 7)
+            return;
+
+        missingCommons = enumMask = 0;
+        givenCommon.do_score(); // Single position evaluation
+    } else {
+        missingCommons = 5 - popcount(givenCommon.cards);
+        if (missingCommons) {
+            unsigned v = 1 << (missingCommons - 1);
+            enumMask = (enumMask << missingCommons) | v;
+        }
+    }
     allMask = all.cards | FlagsArea;
-    commonsNum = popcount(givenCommon.cards);
-    int rndCommons = 5 - commonsNum;
-    if (rndCommons) // Append commons
-        enumMask |= (1 << (rndCommons + (enumMask ? msb(enumMask) : -1)));
-    if (singlePos)
-        givenCommon.do_score(); // Single position
     ready = true;
 }
 
-// Run a single spot and update results vector
+/// Run a single spot and update results vector. First generate common cards,
+/// then hole cards. Finally score the hands and find the max among them.
 void Spot::run(Result results[])
 {
+    unsigned maxId = 0, split = 0;
     uint64_t maxScore = 0;
-    unsigned split = 0;
     Hand common = givenCommon;
 
-    unsigned cnt = 5 - commonsNum;
+    unsigned cnt = missingCommons;
     while (cnt) {
         uint64_t n = prng->next();
         for (unsigned i = 0; i <= 64 - 6; i += 6)
@@ -128,103 +139,103 @@ void Spot::run(Result results[])
                 break;
     }
 
-    for (size_t i = 0; i < numPlayers; ++i) {
+    for (unsigned i = 0; i < numPlayers; ++i) {
         hands[i] = common;
         hands[i].merge(givenHoles[i]);
     }
 
-    const int* f = fill;
-    while (*f != -1) {
+    const int* mi = missingHolesId;
+    while (*mi != -1) {
         uint64_t n = prng->next();
         for (unsigned i = 0; i <= 64 - 6; i += 6)
-            if (hands[*f].add(Card((n >> i) & 0x3F), allMask) && *(++f) == -1)
+            if (hands[*mi].add(Card((n >> i) & 0x3F), allMask) && *(++mi) == -1)
                 break;
     }
 
-    for (size_t i = 0; i < numPlayers; ++i) {
-
+    for (unsigned i = 0; i < numPlayers; ++i) {
         hands[i].do_score();
-
         if (maxScore < hands[i].score) {
             maxScore = hands[i].score;
+            maxId = i;
             split = 0;
         } else if (maxScore == hands[i].score)
             split++;
     }
 
-    // Credit the winner 2 points, split result 1 point
-    for (size_t i = 0; i < numPlayers; ++i) {
-        if (hands[i].score == maxScore) {
-            if (!split)
-                results[i].first++;
-            else
+    if (!split)
+        results[maxId].first++;
+    else
+        for (unsigned i = 0; i < numPlayers; ++i) {
+            if (hands[i].score == maxScore)
                 results[i].second += KTie / (split + 1);
         }
-    }
 }
 
-// Recursively compute all possible combinations (not permutations) of missing
-// cards for each group of hole and common cards.
-void Spot::enumerate(int missing, vector<int>& set, int limit)
+/// Recursively compute all possible combinations (not permutations) of missing
+/// cards for each hole group and common cards. Then add the cards to enumBuf
+/// from where Spot::run() will fetch instead of using the PRNG. We push one
+/// uint64_t (that can pack up to 10 cards) for the missing commons cards and
+/// one for the missing hole cards.
+void Spot::enumerate(unsigned missing, uint64_t cards, int limit,
+    unsigned missingHoles)
 {
-    if (missing == 0) {
-        auto rndCommons = 5 - commonsNum;
-        if (rndCommons) {
-            uint64_t n = 0;
-            for (size_t i = 0; i < rndCommons; ++i)
-                n = (n << 6) + set[i];
-            enumBuf.push_back(n);
-        }
-        if (set.size() > rndCommons) {
-            uint64_t n = 0;
-            for (size_t i = rndCommons; i < set.size(); ++i)
-                n = (n << 6) + set[i];
-            enumBuf.push_back(n);
-        }
-        return;
-    }
-
     // At group boundaries enumMask is 1. We reset to 64 in this case
-    auto end = (enumMask & (1 << (missing - 1))) ? 64 : limit;
-    auto idx = set.size() - missing;
+    unsigned end = (enumMask & (1 << (missing - 1))) ? 64 : limit;
+    cards <<= 6;
 
-    for (int c = 0; c < end; ++c) {
+    for (unsigned c = 0; c < end; ++c) {
 
         uint64_t n = 1ULL << c;
 
         if (allMask & n)
             continue;
 
-        set[idx] = c;
+        cards += c; // Append the new card
 
-        allMask |= n;
-        enumerate(missing - 1, set, c);
-        allMask ^= n;
+        if (missing == 1) {
+            if (missingCommons) {
+                unsigned mask = (1 << (6 * missingCommons)) - 1;
+                enumBuf.push_back(cards & mask);
+            }
+            if (missingHoles)
+                enumBuf.push_back(cards >> (6 * missingCommons));
+        } else {
+            allMask |= n;
+            enumerate(missing - 1, cards, c, missingHoles);
+            allMask ^= n;
+        }
+        cards -= c;
     }
 }
 
+/// Setup to run a full enumeration instead of the Monte Carlo simulation. This
+/// is possible when the number of missing cards is limited. Full enumeration is
+/// implemented in 2 steps: first all the combinations for the missing cards are
+/// computed and saved in enumBuf, then Spot::run() is called as usual, but
+/// instead of fetching cards from the PRNG, it will fetch from enumBuf. Here
+/// we implement the first step: computation of all the possible combinations.
 size_t Spot::set_enumerate_mode()
 {
-    int given = popcount(allMask & ~FlagsArea);
-    int missing = 5 + 2 * numPlayers - given;
-    int rndCommons = 5 - commonsNum;
-    vector<int> set(missing);
+    unsigned given = popcount(allMask & ~FlagsArea);
+    unsigned missing = 5 + 2 * numPlayers - given;
+    unsigned missingHoles = missing - missingCommons;
 
-    if (!missing)
+    if (missing == 0)
         return 0;
 
     if (missing > 5) {
         cout << "Missing too many cards (" << missing << "), max is 5" << endl;
         return 0;
     }
-    enumerate(missing, set, 64);
-    size_t size = enumBuf.size();
+    enumBuf.clear();
+    enumerate(missing, 0, 64, missingHoles);
+    size_t gamesNum = enumBuf.size();
 
-    // We have 2 entries for game in enumBuf (instead of 1) if we have to fill
-    // both common and hole cards, so halve size in this case.
-    if (rndCommons && missing > rndCommons)
-        size /= 2;
+    // We have 2 entries (instead of 1) for a single game in enumBuf in case
+    // both some common and hole cards are missing.
+    if (missingCommons && missingHoles)
+        gamesNum /= 2;
 
-    cout << "Evaluating " << size << " combinations..." << endl;
-    return size;
+    cout << "Evaluating " << gamesNum << " combinations..." << endl;
+    return gamesNum;
 }

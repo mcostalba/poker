@@ -124,20 +124,20 @@ struct Hand {
 
 class Spot {
 
-    int fill[PLAYERS_NB * HOLE_NB + 1];
+    int missingHolesId[PLAYERS_NB * HOLE_NB + 1];
     Hand givenHoles[PLAYERS_NB];
     Hand hands[PLAYERS_NB];
     Hand givenCommon;
 
     std::vector<uint64_t> enumBuf;
     PRNG* prng;
-    size_t numPlayers;
-    unsigned commonsNum;
+    unsigned numPlayers;
+    unsigned missingCommons;
     uint32_t enumMask;
     uint64_t allMask;
     bool ready;
 
-    void enumerate(int missing, std::vector<int>& set, int limit);
+    void enumerate(unsigned missing, uint64_t cards, int limit, unsigned missingHoles);
 
 public:
     Spot() = default;
