@@ -176,14 +176,19 @@ void Spot::run(Result results[])
 /// from where Spot::run() will fetch instead of using the PRNG. We push one
 /// uint64_t (that can pack up to 10 cards) for the missing commons cards and
 /// one for the missing hole cards.
-void Spot::enumerate(unsigned missing, uint64_t cards, int limit,
-    unsigned missingHoles)
+void Spot::enumerate(std::vector<uint64_t>& buf, unsigned missing,
+                     uint64_t cards, int limit, unsigned missingHoles,
+                     size_t idx, size_t threadsNum)
 {
     // At group boundaries enumMask is 1. We reset to 64 in this case
     unsigned end = (enumMask & (1 << (missing - 1))) ? 64 : limit;
     cards <<= 6;
 
     for (unsigned c = 0; c < end; ++c) {
+
+        // Split the cards among the threads. Only at root level
+        if (threadsNum && idx != (c % threadsNum))
+            continue;
 
         uint64_t n = 1ULL << c;
 
@@ -195,13 +200,13 @@ void Spot::enumerate(unsigned missing, uint64_t cards, int limit,
         if (missing == 1) {
             if (missingCommons) {
                 unsigned mask = (1 << (6 * missingCommons)) - 1;
-                enumBuf.push_back(cards & mask);
+                buf.push_back(cards & mask);
             }
             if (missingHoles)
-                enumBuf.push_back(cards >> (6 * missingCommons));
+                buf.push_back(cards >> (6 * missingCommons));
         } else {
             allMask |= n;
-            enumerate(missing - 1, cards, c, missingHoles);
+            enumerate(buf, missing - 1, cards, c, missingHoles, idx, 0);
             allMask ^= n;
         }
         cards -= c;
@@ -214,7 +219,8 @@ void Spot::enumerate(unsigned missing, uint64_t cards, int limit,
 /// computed and saved in enumBuf, then Spot::run() is called as usual, but
 /// instead of fetching cards from the PRNG, it will fetch from enumBuf. Here
 /// we implement the first step: computation of all the possible combinations.
-size_t Spot::set_enumerate_mode()
+size_t Spot::set_enumerate(std::vector<uint64_t>& enumBuf,
+                           size_t idx, size_t threadsNum)
 {
     unsigned given = popcount(allMask & ~FlagsArea);
     unsigned missing = 5 + 2 * numPlayers - given;
@@ -228,7 +234,7 @@ size_t Spot::set_enumerate_mode()
         return 0;
     }
     enumBuf.clear();
-    enumerate(missing, 0, 64, missingHoles);
+    enumerate(enumBuf, missing, 0, 64, missingHoles, idx, threadsNum);
     size_t gamesNum = enumBuf.size();
 
     // We have 2 entries (instead of 1) for a single game in enumBuf in case
@@ -239,3 +245,7 @@ size_t Spot::set_enumerate_mode()
     cout << "Evaluating " << gamesNum << " combinations..." << endl;
     return gamesNum;
 }
+
+
+// FIXME enum != monte carlo
+// ./poker go -e -g 10M -p 2 Js Qc - 2s Th 5h

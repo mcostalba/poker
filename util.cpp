@@ -67,24 +67,26 @@ uint64_t up_to(uint64_t b)
 
 class Thread {
 
+    size_t idx;
     PRNG prng;
     Spot spot;
     size_t gamesNum;
     std::thread* th;
     Result results[PLAYERS_NB];
+    std::vector<uint64_t> enumBuf;
 
 public:
     Result result(size_t p) const { return results[p]; }
 
-    Thread(size_t idx, const Spot& s, size_t n)
-        : prng(idx)
+    Thread(size_t id, const Spot& s, size_t n, size_t threadsNum, bool e)
+        : idx(id)
+        , prng(id)
         , spot(s)
         , gamesNum(n)
     {
-
-        memset(results, 0, sizeof(results));
-        spot.set_prng(&prng);
-        th = new std::thread(&Thread::run, this);
+       memset(results, 0, sizeof(results));
+       spot.set_prng(&prng);
+       th = new std::thread(&Thread::run, this, e, threadsNum);
     }
 
     void join()
@@ -93,8 +95,14 @@ public:
         delete th;
     }
 
-    void run()
+    void run(bool e, size_t threadsNum)
     {
+        if (e) {
+            gamesNum = spot.set_enumerate(enumBuf, idx, threadsNum);
+            if (!gamesNum)
+                return;
+            prng.set_enum_buffer(enumBuf.data());
+        }
         for (size_t i = 0; i < gamesNum; i++)
             spot.run(results);
     }
@@ -102,14 +110,14 @@ public:
 
 } // namespace
 
-void run(const Spot& s, size_t gamesNum, size_t threadsNum, Result results[])
+void run(const Spot& s, size_t gamesNum, size_t threadsNum, bool enumerate, Result results[])
 {
     std::vector<Thread*> threads;
 
     size_t n = gamesNum < threadsNum ? 1 : gamesNum / threadsNum;
 
     for (size_t i = 0; i < threadsNum; ++i)
-        threads.push_back(new Thread(i, s, n));
+        threads.push_back(new Thread(i, s, n, threadsNum, enumerate));
 
     for (Thread* th : threads) {
         th->join();
@@ -233,8 +241,13 @@ ostream& operator<<(ostream& os, const Hand& h)
     return os;
 }
 
-void print_results(Result* results, size_t players, size_t games)
+void print_results(Result* results, size_t players)
 {
+    size_t games = 0;
+    for (size_t p = 0; p < players; p++)
+        games += KTie * results[p].first + results[p].second;
+    games /= KTie;
+
     cout << std::showpoint << std::noshowpos << std::fixed << std::setprecision(2)
          << "\n     Equity    Win     Tie   Pots won  Pots tied\n";
 
@@ -268,12 +281,12 @@ void bench(istringstream& is)
         cerr << "\nPosition " << cnt++ << ": " << v << endl;
         memset(results, 0, sizeof(results));
         Spot s(v);
-        run(s, GamesNum, threadsNum, results);
+        run(s, GamesNum, threadsNum, false, results);
 
         for (size_t p = 0; p < s.players(); p++)
             sig << results[p].first + results[p].second;
 
-        print_results(results, s.players(), GamesNum);
+        print_results(results, s.players());
 
         cards += GamesNum * (s.players() * 2 + 5);
         spots += GamesNum;

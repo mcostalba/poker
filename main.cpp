@@ -87,13 +87,10 @@ void go(istringstream& is)
         return;
     }
 
-    if (enumerate && (gamesNum = s.set_enumerate_mode()) == 0)
-        return;
-
     Result results[PLAYERS_NB];
     memset(results, 0, sizeof(results));
-    run(s, gamesNum, threadsNum, results);
-    print_results(results, players, gamesNum);
+    run(s, gamesNum, threadsNum, enumerate, results);
+    print_results(results, players);
 }
 
 void eval(istringstream& is)

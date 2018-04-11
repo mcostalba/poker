@@ -129,7 +129,6 @@ class Spot {
     Hand hands[PLAYERS_NB];
     Hand givenCommon;
 
-    std::vector<uint64_t> enumBuf;
     PRNG* prng;
     unsigned numPlayers;
     unsigned missingCommons;
@@ -137,26 +136,21 @@ class Spot {
     uint64_t allMask;
     bool ready;
 
-    void enumerate(unsigned missing, uint64_t cards, int limit, unsigned missingHoles);
-
+    void enumerate(std::vector<uint64_t>& enumBuf, unsigned missing,
+                   uint64_t cards, int limit, unsigned missingHoles,
+                   size_t idx, size_t threadsNum);
 public:
     Spot() = default;
     explicit Spot(const std::string& pos);
     void run(Result results[]);
-    size_t set_enumerate_mode();
+    size_t set_enumerate(std::vector<uint64_t>&, size_t, size_t);
 
     bool valid() const { return ready; }
     uint64_t eval() const { return givenCommon.score; }
     size_t players() const { return numPlayers; }
-    void set_prng(PRNG* p)
-    {
-        assert(p);
-
-        prng = p;
-        prng->set_enum_buffer(enumBuf.size() ? enumBuf.data() : nullptr);
-    }
+    void set_prng(PRNG* p) { prng = p; }
 };
 
-extern void run(const Spot& s, size_t games, size_t threads, Result results[]);
+extern void run(const Spot& s, size_t games, size_t threads, bool enumerate, Result results[]);
 
 #endif // #ifndef POKER_H_INCLUDED
