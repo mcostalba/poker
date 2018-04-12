@@ -13,14 +13,15 @@
 
 using namespace std;
 
-// Table contains 1326 masks for all the possible combinations of c1, c2
-// where c2 < c1 and c1 = [0..63]
-// Index is (c1 << 6) + c2 and highest is 63 * 64 + 63 = 4095
-// Indeed because valid cards have (c 0xF) < 13, max index is 3899
+/// ScoreMask contains 1248 masks for each combination of 2 cards c1, c2 in range
+/// [0..63] with c1 > c2 and with c1, c2 of different face value (2,3..K,A).
+/// ScoreMask is indexed by (c1 << 6) + c2. ScoreMask bitwise AND the hand score
+/// to "fix" it for some special cases.
 uint64_t ScoreMask[4096];
 
 namespace {
 
+// Positions used by bench
 const vector<string> Defaults = {
     "2P 3d",
     "3P KhKs - Ac Ad 7c Ts Qs",
@@ -34,6 +35,15 @@ const vector<string> Defaults = {
     "4P AhAd AcTh 7c6s 2h3h",
 };
 
+typedef chrono::milliseconds::rep TimePoint; // A value in milliseconds
+
+TimePoint now()
+{
+    return chrono::duration_cast<chrono::milliseconds>(
+        chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
 // Quick hash, see https://stackoverflow.com/questions/13325125/
 // lightweight-8-byte-hash-function-algorithm
 struct Hash {
@@ -44,26 +54,6 @@ struct Hash {
     void operator<<(unsigned v) { mix += (v * Mulp) ^ (mix >> 23); }
     uint64_t get() { return mix ^ (mix << 37); }
 };
-
-typedef chrono::milliseconds::rep TimePoint; // A value in milliseconds
-
-TimePoint now()
-{
-    return chrono::duration_cast<chrono::milliseconds>(
-        chrono::steady_clock::now().time_since_epoch())
-        .count();
-}
-
-uint64_t below(uint64_t b) { return (b >> 16) | (b >> 32) | (b >> 48); }
-uint64_t to_pick(unsigned n) { return n << 13; }
-uint64_t up_to(uint64_t b)
-{
-    for (int i = 4; i >= 0; --i)
-        if (b & RanksBB[i])
-            return (b - 1) & RanksBB[i];
-    assert(false);
-    return 0;
-}
 
 class Thread {
 
@@ -78,15 +68,17 @@ class Thread {
 public:
     Result result(size_t p) const { return results[p]; }
 
-    Thread(size_t id, const Spot& s, size_t n, size_t threadsNum, bool e)
+    Thread(size_t id, const Spot& s, size_t n, size_t threadsNum, bool enumerate)
         : idx(id)
         , prng(id)
         , spot(s)
         , gamesNum(n)
     {
-       memset(results, 0, sizeof(results));
-       spot.set_prng(&prng);
-       th = new std::thread(&Thread::run, this, e, threadsNum);
+        memset(results, 0, sizeof(results));
+        spot.set_prng(&prng);
+
+        // Launch a thread that will call immediately Thread::run()
+        th = new std::thread(&Thread::run, this, enumerate, threadsNum);
     }
 
     void join()
@@ -95,9 +87,9 @@ public:
         delete th;
     }
 
-    void run(bool e, size_t threadsNum)
+    void run(bool enumerate, size_t threadsNum)
     {
-        if (e) {
+        if (enumerate) {
             gamesNum = spot.set_enumerate(enumBuf, idx, threadsNum);
             if (!gamesNum)
                 return;
@@ -108,20 +100,41 @@ public:
     }
 };
 
+// Helpers used by init_score_mask()
+constexpr uint64_t set_counter(unsigned n)
+{
+    return n << 13;
+}
+uint64_t clear_below(uint64_t b)
+{
+    return ~((b >> 16) | (b >> 32) | (b >> 48));
+}
+uint64_t clear_before(uint64_t b)
+{
+    unsigned r = msb(b) / 16; // Rank in [0..3]
+    return ~((b - 1) & RanksBB[r]);
+}
+
 } // namespace
 
-void run(const Spot& s, size_t gamesNum, size_t threadsNum, bool enumerate, Result results[])
+/// Create, run and retire threads of execution, needed data is passed through
+/// the wrapping Thread object. New threads are created every time run is called.
+void run(const Spot& s, size_t gamesNum, size_t threadsNum,
+    bool enumerate, Result results[])
 {
-    std::vector<Thread*> threads;
+    std::vector<Thread*> threads; // Pointers because std::vector reallocates
 
-    size_t n = gamesNum < threadsNum ? 1 : gamesNum / threadsNum;
+    if (gamesNum < threadsNum)
+        threadsNum = 1;
+
+    size_t n = gamesNum / threadsNum;
 
     for (size_t i = 0; i < threadsNum; ++i)
         threads.push_back(new Thread(i, s, n, threadsNum, enumerate));
 
     for (Thread* th : threads) {
-        th->join();
-        for (size_t p = 0; p < s.players(); p++) {
+        th->join(); // Wait here for thread finished
+        for (size_t p = 0; p < s.players(); ++p) {
             results[p].first += th->result(p).first;
             results[p].second += th->result(p).second;
         }
@@ -129,9 +142,23 @@ void run(const Spot& s, size_t gamesNum, size_t threadsNum, bool enumerate, Resu
     }
 }
 
+/// Populate ScoreMask[] at startup. Table is indexed by the 2 highest bits of
+/// the score value that correspond to the hand's best combination (for instance
+/// a set and a pair). Given these 2 keys, the table is built such that a bitwise
+/// AND with the score produces the following:
+///
+/// - Clear all the bits below in the column of the 2 highest ones
+///
+/// - Preserve/clear some flag bit according to the combination
+///
+/// - Set the number of bits that should remain in score's first rank, so that
+///   the score uses just the best 5 cards out of 7.
+///
 void init_score_mask()
 {
-    const uint64_t Fixed = FullHouseBB | DoublePairBB | to_pick(7);
+    // Fixed mask to clear the 3-bit counter and some flags that eventually
+    // will be re-added when neded on specific cases (like double pair).
+    constexpr uint64_t Init = ~(FullHouseBB | DoublePairBB | set_counter(7));
 
     for (unsigned c1 = 0; c1 < 64; c1++) {
 
@@ -143,48 +170,63 @@ void init_score_mask()
             if ((c2 & 0xF) >= INVALID)
                 continue;
 
+            // When used in scoring, the 2 key bits always correspond to cards
+            // of different face value, so skip this case.
+            if ((c1 & 0xF) == (c2 & 0xF))
+                continue;
+
             unsigned idx = (c1 << 6) + c2;
 
             uint64_t h = 1ULL << c1;
             uint64_t l = 1ULL << c2;
 
-            // High card
+            // Init and clear the columns below the 2 most significant bits
+            ScoreMask[idx] = Init & clear_below(h) & clear_below(l);
+
+            // High card. Set counter to pick the 5 msb bits in score's first rank
             if (h & Rank1BB)
-                ScoreMask[idx] = ~Fixed | to_pick(5);
+                ScoreMask[idx] |= set_counter(5);
 
-            // Pair
+            // Single pair, we just need highest 3 bit of score's first rank
             else if ((h & Rank2BB) && (l & Rank1BB))
-                ScoreMask[idx] = ~(Fixed | below(h)) | to_pick(3);
+                ScoreMask[idx] |= set_counter(3);
 
-            // Double Pair (there could be also a third one that is dropped)
-            else if ((h & Rank2BB) && (l & Rank2BB))
-                ScoreMask[idx] = ~(Fixed | below(h) | below(l) | up_to(l)) | DoublePairBB | to_pick(1);
-
-            // Set
+            // Double Pair. Use clear_before(l) to drop any possible third pair
+            // that should not influence the score.
+            else if ((h & Rank2BB) && (l & Rank2BB)) {
+                ScoreMask[idx] &= clear_before(l);
+                ScoreMask[idx] |= set_counter(1) | DoublePairBB;
+            }
+            // Single Set. Nothing fancy.
             else if ((h & Rank3BB) && (l & Rank1BB))
-                ScoreMask[idx] = ~(Fixed | below(h)) | to_pick(2);
+                ScoreMask[idx] |= set_counter(2);
 
-            // Full house (there could be also a second pair that is dropped)
+            // Full house. Use clear_before(l) to drop any possible second pair
+            // that should not influence the score.
             else if ((h & Rank3BB) && (l & Rank2BB)) {
-                ScoreMask[idx] = ~(Fixed | below(h) | below(l) | up_to(l)) | FullHouseBB | to_pick(0);
-                ScoreMask[idx] &= ~Rank1BB; // Drop all first line
+                ScoreMask[idx] &= clear_before(l);
+                ScoreMask[idx] |= set_counter(0) | FullHouseBB;
             }
-            // Double set: it's a full house, second set is counted as a pair
+            // Double set. It's a full house, second set is counted as a pair,
+            // so use clear_before(h), not clear_before(l) as in double pair.
             else if ((h & Rank3BB) && (l & Rank3BB)) {
-                ScoreMask[idx] = ~(Fixed | below(h) | below(l) | up_to(h));
-                ScoreMask[idx] |= (l >> 16) | FullHouseBB | to_pick(0);
-                ScoreMask[idx] &= ~Rank1BB; // Drop all first line
+                ScoreMask[idx] &= clear_before(h);
+                // Re-add the (shifted) bit dropped by clear_below(h, l)
+                ScoreMask[idx] |= (l >> 16) | set_counter(0) | FullHouseBB;
             }
-            // Quad: drop anything else but first rank
-            else if ((h & Rank4BB))
-                ScoreMask[idx] = ~(Fixed | below(h) | up_to(h) | Rank3BB | Rank2BB) | to_pick(1);
-            else
+            // Quad. Drop anything but first rank. Re-add the bit on first
+            // rank in the column of l, that was dropped by clear_below(h, l)
+            else if ((h & Rank4BB)) {
+                ScoreMask[idx] ^= ~clear_below(l); // Re-add bits below l
+                ScoreMask[idx] &= ~(Rank3BB | Rank2BB);
+                ScoreMask[idx] |= set_counter(1);
+            } else
                 assert(false);
         }
     }
 }
 
-const string pretty_hand(uint64_t b, bool headers)
+const string pretty64(uint64_t b, bool headers)
 {
     string s = "\n";
     string hstr = headers ? "\n" : "---+---+---+\n";
@@ -223,7 +265,7 @@ ostream& operator<<(ostream& os, const Hand& h)
     while (v)
         cards.push_back(Card(pop_lsb(&v)));
 
-    // Sort the cards in descending value
+    // Sort the cards in descending face value
     auto comp = [](Card a, Card b) { return (a & 0xF) > (b & 0xF); };
     sort(cards.begin(), cards.end(), comp);
 
@@ -231,17 +273,15 @@ ostream& operator<<(ostream& os, const Hand& h)
     for (Card c : cards)
         os << c;
 
-    os << "\n"
-       << pretty_hand(h.cards, true) << "\n";
+    os << "\n" << pretty64(h.cards, true) << "\n";
 
     if (h.score)
-        os << "\nScore:\n"
-           << pretty_hand(h.score, false) << "\n";
+        os << "\nScore:\n" << pretty64(h.score, false) << "\n";
 
     return os;
 }
 
-void print_results(Result* results, size_t players)
+void pretty_results(Result* results, size_t players)
 {
     size_t games = 0;
     for (size_t p = 0; p < players; p++)
@@ -252,9 +292,9 @@ void print_results(Result* results, size_t players)
          << "\n     Equity    Win     Tie   Pots won  Pots tied\n";
 
     for (size_t p = 0; p < players; p++) {
-        cout << "P" << p+1 << ": ";
-        size_t v = KTie * results[p].first + results[p].second;
-        cout << std::setw(6) << v * 100.0 / KTie / games << "% "
+        cout << "P" << p + 1 << ": ";
+        size_t equity = KTie * results[p].first + results[p].second;
+        cout << std::setw(6) << equity * 100.0 / KTie / games << "% "
              << std::setw(6) << results[p].first * 100.0 / games << "% "
              << std::setw(6) << results[p].second * 100.0 / KTie / games << "% "
              << std::setw(9) << results[p].first << " "
@@ -269,24 +309,23 @@ void bench(istringstream& is)
 
     Result results[PLAYERS_NB];
     string token;
-    uint64_t cards = 0, spots = 0, cnt = 1;
     Hash sig;
+    uint64_t cards = 0, spots = 0, cnt = 0;
 
     int threadsNum = (is >> token) ? stoi(token) : 1;
 
     TimePoint elapsed = now();
 
     for (const string& v : Defaults) {
-
-        cerr << "\nPosition " << cnt++ << ": " << v << endl;
+        cerr << "\nPosition " << ++cnt << ": " << v << endl;
         memset(results, 0, sizeof(results));
         Spot s(v);
         run(s, GamesNum, threadsNum, false, results);
 
-        for (size_t p = 0; p < s.players(); p++)
+        for (size_t p = 0; p < s.players(); ++p)
             sig << results[p].first + results[p].second;
 
-        print_results(results, s.players());
+        pretty_results(results, s.players());
 
         cards += GamesNum * (s.players() * 2 + 5);
         spots += GamesNum;
@@ -295,14 +334,16 @@ void bench(istringstream& is)
     elapsed = now() - elapsed + 1; // Ensure positivity to avoid a 'divide by zero'
 
     cerr << "\n==========================="
-         << "\nTotal time  (ms): " << elapsed
-         << "\nSpots played (M): " << spots / 1000000
-         << "\nCards/second    : " << 1000 * cards / elapsed
-         << "\nSpots/second    : " << 1000 * spots / elapsed
-         << "\nSignature       : " << sig.get();
+         << "\nTotal time   : " << elapsed << " msec"
+         << "\nSpots played : " << spots / 1000000 << "M"
+         << "\nCards/second : " << 1000 * cards / elapsed
+         << "\nGames/second : " << 1000 * spots / elapsed
+         << "\nSignature    : " << sig.get();
 
     if (sig.get() == GoodSig)
-        cerr << " (OK)" << endl;
-    else
-        cerr << " (FAIL)" << endl;
+        cerr << " (OK)";
+    else if (threadsNum == 1)
+        cerr << " (FAIL)";
+
+    cerr << endl;
 }

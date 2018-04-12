@@ -20,19 +20,18 @@ Simply call with _go_ command and the given cards, like:
 ```
 ; 2 players table with given hole cards
 $ ./poker go AcKd 7h7s
-Equity: 44.59%  55.41%
 
 ; 4 threads and 2 players, first one has a 3 of diamond
 $ ./poker go -t 4 -p 2 3d
-Equity: 42.67%  57.33%
 
 ; 3 players and 10M games, player one has pocket kings, board is given
 $ ./poker go -p 3 -g 10M KhKs - 8c 4d 7c Ts Qs
-Equity: 70.37%  14.84%  14.79%
 
 ; 3 players, each one with a given hole card. Full enumerate instead of Monte Carlo
 $ ./poker go -e Ac Td 7h - 5h 6h 9c Qs
-Equity: 34.66%  25.36%  39.97%
+
+; Full enumeration with 2 threads
+$ ./poker go -e -t 2 AcKd 7h7s
 ```
 
 

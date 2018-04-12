@@ -90,7 +90,7 @@ void go(istringstream& is)
     Result results[PLAYERS_NB];
     memset(results, 0, sizeof(results));
     run(s, gamesNum, threadsNum, enumerate, results);
-    print_results(results, players);
+    pretty_results(results, players);
 }
 
 void eval(istringstream& is)
@@ -106,7 +106,7 @@ void eval(istringstream& is)
     }
 
     cout << "Score is: " << s.eval() << "\n"
-         << pretty_hand(s.eval(), false) << endl;
+         << pretty64(s.eval(), false) << endl;
 }
 
 int main(int argc, char* argv[])
