@@ -99,10 +99,9 @@ struct Hand {
         v &= v >> 1;
         v &= v >> 2;
         if (v) {
+            auto f = (score & FlushBB) ? StraightFlushBB : StraightBB;
             v = 1ULL << msb(v); // Could be more than 1 in case of straight > 5
-            score &= FlagsArea; // Clear old score, it will be replaced
-            score |= (score & FlushBB) ? StraightFlushBB : StraightBB;
-            score |= (v << 3) | (v << 2); // At least 2 bits needed by ScoreMask
+            score = f | (v << 3) | (v << 2); // At least 2 bits needed by ScoreMask
         }
 
         // Drop all bits below the highest ones so that when calling 2 times
