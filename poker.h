@@ -2,6 +2,7 @@
 #ifndef POKER_H_INCLUDED
 #define POKER_H_INCLUDED
 
+#include <array>
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -46,6 +47,7 @@ constexpr uint32_t IsFlush   =   8 | (8 << 4) | (8 << 8) | (8 << 12);
 
 struct Hand {
 
+    const Card* range;
     uint64_t score;
     uint64_t cards;
     uint32_t suits;
@@ -54,6 +56,9 @@ struct Hand {
 
     bool add(Card c, uint64_t all)
     {
+        if (range)
+            c = range[c];
+
         uint64_t n = 1ULL << c;
 
         if ((cards | all) & n) // Double card or invalid
@@ -73,6 +78,8 @@ struct Hand {
 
     void merge(const Hand& holes)
     {
+        range = holes.range;
+
         if ((score & holes.score) == 0) { // Common case
             score |= holes.score;
             cards |= holes.cards;
@@ -123,10 +130,13 @@ struct Hand {
 
 class Spot {
 
+    typedef std::array<Card, 64> Range;
+
     int missingHolesId[PLAYERS_NB * HOLE_NB + 1];
     Hand givenHoles[PLAYERS_NB];
     Hand hands[PLAYERS_NB];
     Hand givenCommon;
+    std::vector<Range> ranges;
 
     PRNG* prng;
     unsigned numPlayers;

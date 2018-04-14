@@ -57,6 +57,11 @@ Spot::Spot(const std::string& pos)
     memset(givenHoles, 0, sizeof(givenHoles));
     memset(hands, 0, sizeof(hands));
 
+    ranges.emplace_back(Range());
+    Range& defaultRange = ranges.back();
+    for (unsigned i = 0; i < 64; ++i)
+        defaultRange[i] = Card(i);
+
     givenCommon = Hand();
     givenCommon.suits = SuitInit; // Only givenCommon is set with SuitInit
     prng = nullptr;
@@ -90,6 +95,10 @@ Spot::Spot(const std::string& pos)
             if (popcount(givenHoles[n].cards) < 2) {
                 *mi++ = n;
                 enumMask = (enumMask << 1) | 1;
+
+                // Assign default range to first hole. This is just for demonstration
+                if (n == 0)
+                    givenHoles[n].range = &defaultRange.at(0);
             }
         }
         // Populate missingHolesId[] and enumMask for the missing hole card
