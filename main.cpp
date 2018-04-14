@@ -19,7 +19,7 @@ static string parse_args(istringstream& is, size_t& players,
     };
 
     map<string, string> args;
-    string token, value;
+    string token, value, sep = " ";
     size_t holesCnt = 0;
     States st = Option;
 
@@ -44,7 +44,11 @@ static string parse_args(istringstream& is, size_t& players,
                 st = Common;
                 continue;
             }
-            args["holes"] += token + " ";
+            if (token.front() == '[')
+                sep = "";
+            if (token.back() == ']')
+                sep = " ";
+            args["holes"] += token + sep;
             holesCnt++;
         }
         if (st == Common)
@@ -71,7 +75,7 @@ static string parse_args(istringstream& is, size_t& players,
     } else
         gamesNum = 1000 * 1000;
 
-    string sep = (players == 1 ? "" : "- ");
+    sep = (players == 1 ? "" : "- ");
     return to_string(players) + "P " + args["holes"] + sep + args["commons"];
 }
 

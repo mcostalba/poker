@@ -16,6 +16,7 @@ enum Card : unsigned { INVALID = 13 };
 
 constexpr int PLAYERS_NB = 9;
 constexpr int HOLE_NB    = 2;
+constexpr int MAX_RANGE  = 1 << 9;
 
 // Bitboards representing ranks/rows
 constexpr uint64_t Rank1BB = 0xFFFFULL << (16 * 0);
@@ -52,11 +53,11 @@ struct Hand {
 
     friend std::ostream& operator<<(std::ostream&, const Hand&);
 
-    bool add(Card c, uint64_t all)
+    bool add(Card c, uint64_t allMask)
     {
         uint64_t n = 1ULL << c;
 
-        if ((cards | all) & n) // Double card or invalid
+        if ((cards | allMask) & n) // Double card or invalid
             return false;
 
         cards |= n;
@@ -123,6 +124,8 @@ struct Hand {
 
 class Spot {
 
+    Hand combos[PLAYERS_NB][MAX_RANGE];
+    int combosId[PLAYERS_NB + 1];
     int missingHolesId[PLAYERS_NB * HOLE_NB + 1];
     Hand givenHoles[PLAYERS_NB];
     Hand hands[PLAYERS_NB];
@@ -132,12 +135,14 @@ class Spot {
     unsigned numPlayers;
     unsigned missingCommons;
     uint32_t enumMask;
-    uint64_t allMask;
+    uint64_t givenAllMask;
     bool ready;
 
     void enumerate(std::vector<uint64_t>& enumBuf, unsigned missing,
                    uint64_t cards, int limit, unsigned missingHoles,
                    size_t idx, size_t threadsNum);
+    bool parse_range(const std::string& token, int player);
+
 public:
     Spot() = default;
     explicit Spot(const std::string& pos);
