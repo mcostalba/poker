@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cstring>
 #include <iostream>
 #include <map>
@@ -9,6 +10,35 @@
 
 using namespace std;
 
+typedef map<size_t, vector<string>> RangeMap;
+
+static bool parse_ranges(const string& holes, RangeMap& ranges) {
+
+    string token, h = holes;
+
+    while (h.find("[") != std::string::npos) {
+
+        auto b = h.find("[");
+        auto e = h.find("]");
+
+        if (e == std::string::npos || b > e)
+            return false;
+
+        // Extract the range n (count spaces before '[' to deduce range id)
+        auto n = std::count(h.begin(), h.begin() + b, ' ');
+        stringstream ss(h.substr(b + 1, e - b - 1));
+
+        // Extract each range's term
+        while(std::getline(ss, token, ',')) {
+            stringstream trim(token);
+            trim >> token;
+            ranges[n].push_back(token);
+        }
+        h.erase(b, e - b + 1);
+    }
+    return true;
+}
+
 static string parse_args(istringstream& is, size_t& players,
     size_t& gamesNum, size_t& threadsNum, bool& enumerate)
 {
@@ -19,6 +49,7 @@ static string parse_args(istringstream& is, size_t& players,
     };
 
     map<string, string> args;
+    RangeMap ranges;
     string token, value;
     size_t holesCnt = 0;
     States st = Option;
@@ -49,6 +80,19 @@ static string parse_args(istringstream& is, size_t& players,
         }
         if (st == Common)
             args["commons"] += token;
+    }
+
+    // Parse ranges, if any
+    if (!parse_ranges(args["holes"], ranges))
+        return args["holes"];
+
+    if (!ranges.empty()) {
+        for (auto const& l : ranges) {
+            cout << "\n" << l.first << endl;
+            for (auto const& r : l.second)
+                std::cout << r << '\n';
+        }
+        exit(0);
     }
 
     // Process options
