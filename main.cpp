@@ -10,137 +10,6 @@
 
 using namespace std;
 
-typedef vector<Hand> Ranges;
-typedef vector<Ranges> AllRanges;
-
-// Expand tokens like T6s+, 88+, 52o+, AA, AK, QQ-99, T7s-T3s, J8-52 in the
-// group of corresponding pair of cards (combos).
-static bool expand(const string& token, Ranges& ranges)
-{
-    enum SuitFilter { AnySuit, Suited, Offsuited };
-
-    const string Values = "23456789TJQKA";
-    const string Suites = "dhcs";
-    const string SO = "so";
-
-    size_t v1, v2, v3 = string::npos, v4 = string::npos;
-    SuitFilter f = AnySuit, f2 = AnySuit;
-    bool plus, plus2, range;
-    size_t next = 0;
-
-    if (   token.length() < 2
-        || (v1 = Values.find(token[next++])) == string::npos
-        || (v2 = Values.find(token[next++])) == string::npos
-        || v1 < v2)
-        return false;
-
-    size_t s = token.length() > next ? SO.find(token[next]) : string::npos;
-    if (s != string::npos) {
-        f = (SO[s] == 's' ? Suited : Offsuited);
-        next++;
-    }
-
-    plus = token.length() > next && token[next] == '+';
-    if (plus)
-        next++;
-
-    range = token.length() > next && token[next] == '-';
-    if (range)
-        next++;
-
-    if ((v1 == v2 && f != AnySuit) || (plus && range))
-        return false;
-
-    if (range) {
-        if (   token.length() < next + 2
-            || (v3 = Values.find(token[next++])) == string::npos
-            || (v4 = Values.find(token[next++])) == string::npos
-            || v3 < v4 || v1 < v3 || v2 < v4)
-            return false;
-
-        if (v1 != v3 && (v1 - v2) != (v3 - v4))
-            return false;
-
-        s = token.length() > next ? SO.find(token[next]) : string::npos;
-        if (s != string::npos) {
-            f2 = (SO[s] == 's' ? Suited : Offsuited);
-            next++;
-        }
-        plus2 = token.length() > next && token[next] == '+';
-
-        if (plus != plus2 || (f != f2))
-            return false;
-    }
-
-    cout << "\nExpand:" << endl;
-
-    while (true) {
-        for (auto c1 : Suites)
-            for (auto c2 : Suites) {
-                if (v1 == v2 && c2 >= c1)
-                    continue;
-                if (   (f == Suited && c1 != c2)
-                    || (f == Offsuited && c1 == c2))
-                    continue;
-
-                Card card1 = Card(16 * Suites.find(c1) + v1);
-                Card card2 = Card(16 * Suites.find(c2) + v2);
-
-                Hand h = Hand();
-                h.add(card1, 0);
-                h.add(card2, 0);
-                ranges.push_back(h);
-
-                cout << Values[v1] + string(1, c1) + Values[v2] + string(1, c2) << endl;
-            }
-
-        if (range && v2 > v4) {
-            if (v1 != v3)
-                v1--, v2--;
-            else
-                v2--;
-        } else if (!plus)
-            break;
-        else if (v1 == v2 && Values[v1] != 'A')
-            v1++, v2++;
-        else if (v2 + 1 < v1)
-            v2++;
-        else
-            break;
-    }
-
-    return true;
-}
-
-static bool parse_ranges(string& holes, AllRanges& allRanges)
-{
-    string token, h = holes;
-
-    while (h.find("[") != std::string::npos) {
-
-        auto b = h.find("[");
-        auto e = h.find("]");
-
-        if (e == std::string::npos || b > e)
-            return false;
-
-        allRanges.push_back(Ranges());
-
-        // Extract each range's term
-        stringstream ss(h.substr(b + 1, e - b - 1));
-
-        while (std::getline(ss, token, ',')) {
-            stringstream trim(token);
-            trim >> token;
-            if (!expand(token, allRanges.back()))
-                return false;
-        }
-        h.replace(b, e - b + 1, "RR");
-    }
-    holes = h;
-    return true;
-}
-
 static string parse_args(istringstream& is, size_t& players,
     size_t& gamesNum, size_t& threadsNum, bool& enumerate)
 {
@@ -151,8 +20,7 @@ static string parse_args(istringstream& is, size_t& players,
     };
 
     map<string, string> args;
-    AllRanges allRanges;
-    string token, value;
+    string token, value, sep = " ";
     size_t holesCnt = 0;
     States st = Option;
 
@@ -177,22 +45,15 @@ static string parse_args(istringstream& is, size_t& players,
                 st = Common;
                 continue;
             }
-            args["holes"] += token + " ";
+            if (token.front() == '[')
+                sep = "";
+            if (token.back() == ']')
+                sep = " ";
+            args["holes"] += token + sep;
             holesCnt++;
         }
         if (st == Common)
             args["commons"] += token;
-    }
-
-    // Parse ranges, if any
-    if (!parse_ranges(args["holes"], allRanges))
-        return args["holes"];
-
-    if (!allRanges.empty()) {
-        cout << "\n" << args["holes"] << "\n" << endl;
-        for (auto& r : allRanges)
-            cout << "Ranges size " << r.size() << endl;
-        exit(0);
     }
 
     // Process options
@@ -215,7 +76,7 @@ static string parse_args(istringstream& is, size_t& players,
     } else
         gamesNum = 1000 * 1000;
 
-    string sep = (players == 1 ? "" : "- ");
+    sep = (players == 1 ? "" : "- ");
     return to_string(players) + "P " + args["holes"] + sep + args["commons"];
 }
 

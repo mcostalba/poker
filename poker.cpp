@@ -3,12 +3,18 @@
 #include <cstring>
 #include <ctype.h>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <string>
 
 #include "poker.h"
 
 using namespace std;
+
+// Needed by std::set, not to compare scores!
+static bool operator<(const Hand& h1, const Hand& h2) {
+    return h1.cards < h2.cards;
+}
 
 // Parse a string token with one or more consecutive cards into a Hand
 static bool parse_cards(const string& token, Hand& h, Hand& all, unsigned max)
@@ -40,6 +46,134 @@ static bool parse_cards(const string& token, Hand& h, Hand& all, unsigned max)
     return true;
 }
 
+// Expand tokens like T6s+, 88+, 52o+, AA, AK, QQ-99, T7s-T3s, J8-52 in the
+// group of corresponding pair of cards (combos).
+static bool expand(const string& token, set<Hand>& ranges)
+{
+    enum SuitFilter { AnySuit, Suited, Offsuited };
+
+    const string Values = "23456789TJQKA";
+    const string Suites = "dhcs";
+    const string SO = "so";
+
+    size_t v1, v2, v3 = string::npos, v4 = string::npos;
+    SuitFilter f = AnySuit, f2 = AnySuit;
+    bool plus, plus2, range;
+    size_t next = 0;
+
+    if (   token.length() < 2
+        || (v1 = Values.find(token[next++])) == string::npos
+        || (v2 = Values.find(token[next++])) == string::npos
+        || v1 < v2)
+        return false;
+
+    size_t s = token.length() > next ? SO.find(token[next]) : string::npos;
+    if (s != string::npos) {
+        f = (SO[s] == 's' ? Suited : Offsuited);
+        next++;
+    }
+
+    plus = token.length() > next && token[next] == '+';
+    if (plus)
+        next++;
+
+    range = token.length() > next && token[next] == '-';
+    if (range)
+        next++;
+
+    if ((v1 == v2 && f != AnySuit) || (plus && range))
+        return false;
+
+    if (range) {
+        if (   token.length() < next + 2
+            || (v3 = Values.find(token[next++])) == string::npos
+            || (v4 = Values.find(token[next++])) == string::npos
+            || v3 < v4 || v1 < v3 || v2 < v4)
+            return false;
+
+        if (v1 != v3 && (v1 - v2) != (v3 - v4))
+            return false;
+
+        s = token.length() > next ? SO.find(token[next]) : string::npos;
+        if (s != string::npos) {
+            f2 = (SO[s] == 's' ? Suited : Offsuited);
+            next++;
+        }
+        plus2 = token.length() > next && token[next] == '+';
+
+        if (plus != plus2 || (f != f2))
+            return false;
+    }
+
+    cout << "\nExpand:" << endl;
+
+    while (true) {
+        for (auto c1 : Suites)
+            for (auto c2 : Suites) {
+                if (v1 == v2 && c2 >= c1)
+                    continue;
+                if (   (f == Suited && c1 != c2)
+                    || (f == Offsuited && c1 == c2))
+                    continue;
+
+                string card = Values[v1] + string(1, c1) + Values[v2] + string(1, c2);
+                Hand h = Hand(), all = Hand();
+
+                parse_cards(card, h, all, 2);
+                ranges.insert(h); // Insert if not already exsisting
+
+                cout << card << endl;
+            }
+
+        if (range && v2 > v4) {
+            if (v1 != v3)
+                v1--, v2--;
+            else
+                v2--;
+        } else if (!plus)
+            break;
+        else if (v1 == v2 && Values[v1] != 'A')
+            v1++, v2++;
+        else if (v2 + 1 < v1)
+            v2++;
+        else
+            break;
+    }
+
+    return true;
+}
+
+bool Spot::parse_range(const string& token)
+{
+    if (token.front() != '[' || token.back() != ']')
+        return false;
+
+    string combo;
+    set<Hand> handSet; // Use a set to avoid duplicates
+
+    stringstream ss(token.substr(1, token.size() - 2));
+
+    // Single token [.,..,..] no space
+    while (std::getline(ss, combo, ',')) {
+        if (!expand(combo, handSet))
+            return false;
+    }
+
+    if (handSet.empty())
+        return false;
+
+    ranges.push_back(Range());
+    Range& r = ranges.back();
+    size_t cnt = 0;
+
+    for (size_t i = 0; i < 1024 / handSet.size(); ++i)
+        for (const Hand& h : handSet)
+            r[cnt++] = h;
+
+    givenRangeSizes[ranges.size() - 1] = cnt;
+    return true;
+}
+
 /// Initialize a Spot from a given string like:
 ///
 ///  4P AcTc TdTh - 5h 6h 9c
@@ -54,13 +188,9 @@ Spot::Spot(const std::string& pos)
     stringstream ss(pos);
 
     memset(missingHolesId, 0, sizeof(missingHolesId));
+    memset(givenRangeSizes, 0, sizeof(givenRangeSizes));
     memset(givenHoles, 0, sizeof(givenHoles));
     memset(hands, 0, sizeof(hands));
-
-    ranges.emplace_back(Range());
-    Range& defaultRange = ranges.back();
-    for (unsigned i = 0; i < 64; ++i)
-        defaultRange[i] = Card(i);
 
     givenCommon = Hand();
     givenCommon.suits = SuitInit; // Only givenCommon is set with SuitInit
@@ -85,20 +215,17 @@ Spot::Spot(const std::string& pos)
     if (!fixedHand) {
         int n = -1, *mi = missingHolesId;
         while (ss >> token && token != "-") {
-            if (!parse_cards(token, givenHoles[++n], all, 2))
+            if (   !parse_cards(token, givenHoles[++n], all, 2)
+                && !parse_range(token))
                 return;
 
-            assert(givenHoles[n].cards);
+            assert(givenHoles[n].cards || givenHoles[n].range);
 
             // Add to missingHolesId[] the hole's index for the missing card
             // and update enumMask setting this hole's group boundary.
-            if (popcount(givenHoles[n].cards) < 2) {
+            if (popcount(givenHoles[n].cards) < 2 && !givenHoles[n].range) {
                 *mi++ = n;
                 enumMask = (enumMask << 1) | 1;
-
-                // Assign default range to first hole. This is just for demonstration
-                if (n == 0)
-                    givenHoles[n].range = &defaultRange.at(0);
             }
         }
         // Populate missingHolesId[] and enumMask for the missing hole card

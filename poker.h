@@ -130,9 +130,10 @@ struct Hand {
 
 class Spot {
 
-    typedef std::array<Card, 64> Range;
+    typedef std::array<Hand, 1024> Range;
 
     int missingHolesId[PLAYERS_NB * HOLE_NB + 1];
+    size_t givenRangeSizes[PLAYERS_NB];
     Hand givenHoles[PLAYERS_NB];
     Hand hands[PLAYERS_NB];
     Hand givenCommon;
@@ -148,6 +149,8 @@ class Spot {
     void enumerate(std::vector<uint64_t>& enumBuf, unsigned missing,
                    uint64_t cards, int limit, unsigned missingHoles,
                    size_t idx, size_t threadsNum);
+    bool parse_range(const std::string& token);
+
 public:
     Spot() = default;
     explicit Spot(const std::string& pos);
