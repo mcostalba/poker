@@ -12,7 +12,8 @@
 using namespace std;
 
 // Needed by std::set, not to compare scores!
-static bool operator<(const Hand& h1, const Hand& h2) {
+static bool operator<(const Hand& h1, const Hand& h2)
+{
     return h1.cards < h2.cards;
 }
 
@@ -105,8 +106,6 @@ static bool expand(const string& token, set<Hand>& ranges)
             return false;
     }
 
-    cout << "\nExpand:" << endl;
-
     while (true) {
         for (auto c1 : Suites)
             for (auto c2 : Suites) {
@@ -116,13 +115,11 @@ static bool expand(const string& token, set<Hand>& ranges)
                     || (f == Offsuited && c1 == c2))
                     continue;
 
-                string card = Values[v1] + string(1, c1) + Values[v2] + string(1, c2);
                 Hand h = Hand(), all = Hand();
-
-                parse_cards(card, h, all, 2);
+                string card = Values[v1] + string(1, c1) + Values[v2] + string(1, c2);
+                if (!parse_cards(card, h, all, 2))
+                    return false;
                 ranges.insert(h); // Insert if not already exsisting
-
-                cout << card << endl;
             }
 
         if (range && v2 > v4) {
@@ -139,38 +136,45 @@ static bool expand(const string& token, set<Hand>& ranges)
         else
             break;
     }
-
     return true;
 }
 
-bool Spot::parse_range(const string& token)
+// Parse a string token with a list of ranges like '[AK,88+,76s+]' or a single
+// one like 'QQ+' into a set of hands, each one of 2 hole cards.
+bool Spot::parse_range(const string& token, int player)
 {
-    if (token.front() != '[' || token.back() != ']')
+    bool hasBrackets = (token.front() == '[' && token.back() == ']');
+    bool isList = (token.find(",") != string::npos);
+    if (!hasBrackets && isList)
         return false;
 
     string combo;
     set<Hand> handSet; // Use a set to avoid duplicates
+    size_t cnt = 0;
+    stringstream ss(hasBrackets ? token.substr(1, token.size() - 2) : token);
 
-    stringstream ss(token.substr(1, token.size() - 2));
-
-    // Single token [.,..,..] no space
-    while (std::getline(ss, combo, ',')) {
+    while (std::getline(ss, combo, ','))
         if (!expand(combo, handSet))
             return false;
-    }
 
-    if (handSet.empty())
+    if (handSet.empty() || handSet.size() > MAX_RANGE)
         return false;
 
-    ranges.push_back(Range());
-    Range& r = ranges.back();
-    size_t cnt = 0;
-
-    for (size_t i = 0; i < 1024 / handSet.size(); ++i)
+    // Duplicate the handset into multiple full copies in combos[]. We will pick
+    // randomly from there at simulation time.
+    for (size_t i = 0; i < MAX_RANGE / handSet.size(); ++i)
         for (const Hand& h : handSet)
-            r[cnt++] = h;
+            combos[player][cnt++] = h;
 
-    givenRangeSizes[ranges.size() - 1] = cnt;
+    // Fill remaining with an invalid hand so that (invalid & allMask) is true
+    Hand invalid;
+    invalid.cards = ~uint64_t(0);
+    while (cnt < MAX_RANGE)
+        combos[player][cnt++] = invalid;
+
+    cout << "Set range " << token << " for player " << player + 1
+         << " of size: " << handSet.size() << endl;
+
     return true;
 }
 
@@ -187,8 +191,6 @@ Spot::Spot(const std::string& pos)
     string token;
     stringstream ss(pos);
 
-    memset(missingHolesId, 0, sizeof(missingHolesId));
-    memset(givenRangeSizes, 0, sizeof(givenRangeSizes));
     memset(givenHoles, 0, sizeof(givenHoles));
     memset(hands, 0, sizeof(hands));
 
@@ -213,17 +215,19 @@ Spot::Spot(const std::string& pos)
 
     // First hole cards. One token per player, up to 2 cards per token
     if (!fixedHand) {
-        int n = -1, *mi = missingHolesId;
+        int n = -1, *mi = missingHolesId, *ci = combosId;
         while (ss >> token && token != "-") {
             if (   !parse_cards(token, givenHoles[++n], all, 2)
-                && !parse_range(token))
+                && !parse_range(token, n))
                 return;
 
-            assert(givenHoles[n].cards || givenHoles[n].range);
+            // In case of a range givenHoles[n] remains empty
+            if (!givenHoles[n].cards)
+                *ci++ = n;
 
             // Add to missingHolesId[] the hole's index for the missing card
             // and update enumMask setting this hole's group boundary.
-            if (popcount(givenHoles[n].cards) < 2 && !givenHoles[n].range) {
+            if (givenHoles[n].cards && popcount(givenHoles[n].cards) < 2) {
                 *mi++ = n;
                 enumMask = (enumMask << 1) | 1;
             }
@@ -234,7 +238,7 @@ Spot::Spot(const std::string& pos)
             *mi++ = i, *mi++ = i;
             enumMask = (enumMask << 2) | 2;
         }
-        *mi = -1; // Set EOF
+        *mi = -1, *ci = -1; // Set EOF
     }
 
     // Then remaining common cards up to 5 (or 7 in case of a fixed hand)
@@ -255,18 +259,35 @@ Spot::Spot(const std::string& pos)
             enumMask = (enumMask << missingCommons) | v;
         }
     }
-    allMask = all.cards | FlagsArea;
+    givenAllMask = all.cards | FlagsArea;
     ready = true;
 }
 
-/// Run a single spot and update results vector. First generate common cards,
-/// then hole cards. Finally score the hands and find the max among them.
+/// Run a single spot and update results vector. First generate hole cards for
+/// given ranges, then common cards, then free hole cards. Finally score the
+/// hands and find the max among them.
 void Spot::run(Result results[])
 {
     unsigned maxId = 0, split = 0;
     uint64_t maxScore = 0;
     Hand common = givenCommon;
+    uint64_t allMask = givenAllMask;
 
+    // First generate givenHoles instances out of the given ranges, if any
+    const int* ci = combosId;
+    while (*ci != -1) {
+        uint64_t n = prng->next();
+        for (unsigned i = 0; i <= 64 - 9; i += 9) {
+            givenHoles[*ci] = combos[*ci][(n >> i) & 0x1FF];
+            if (givenHoles[*ci].cards & allMask)
+                continue;
+            allMask |= givenHoles[*ci].cards;
+            if (*(++ci) == -1)
+                break;
+        }
+    }
+
+    // Then build the common board
     unsigned cnt = missingCommons;
     while (cnt) {
         uint64_t n = prng->next();
@@ -280,6 +301,7 @@ void Spot::run(Result results[])
         hands[i].merge(givenHoles[i]);
     }
 
+    // Finally fill the missing hole cards (single or double)
     const int* mi = missingHolesId;
     while (*mi != -1) {
         uint64_t n = prng->next();
@@ -288,6 +310,7 @@ void Spot::run(Result results[])
                 break;
     }
 
+    // Now we are ready to score hands and find the winner
     for (unsigned i = 0; i < numPlayers; ++i) {
         hands[i].do_score();
         if (maxScore < hands[i].score) {
@@ -328,7 +351,7 @@ void Spot::enumerate(std::vector<uint64_t>& buf, unsigned missing,
 
         uint64_t n = 1ULL << c;
 
-        if (allMask & n)
+        if (givenAllMask & n) // FIXME not compatible with ranges
             continue;
 
         cards += c; // Append the new card
@@ -341,9 +364,9 @@ void Spot::enumerate(std::vector<uint64_t>& buf, unsigned missing,
             if (missingHoles)
                 buf.push_back(cards >> (6 * missingCommons));
         } else {
-            allMask |= n;
+            givenAllMask |= n;
             enumerate(buf, missing - 1, cards, c, missingHoles, idx, 0);
-            allMask ^= n;
+            givenAllMask ^= n;
         }
         cards -= c;
     }
@@ -358,7 +381,7 @@ void Spot::enumerate(std::vector<uint64_t>& buf, unsigned missing,
 size_t Spot::set_enumerate(std::vector<uint64_t>& enumBuf,
                            size_t idx, size_t threadsNum)
 {
-    unsigned given = popcount(allMask & ~FlagsArea);
+    unsigned given = popcount(givenAllMask & ~FlagsArea);
     unsigned missing = 5 + 2 * numPlayers - given;
     unsigned missingHoles = missing - missingCommons;
 
@@ -381,7 +404,3 @@ size_t Spot::set_enumerate(std::vector<uint64_t>& enumBuf,
     cout << "Evaluating " << gamesNum << " combinations..." << endl;
     return gamesNum;
 }
-
-
-// FIXME enum != monte carlo
-// ./poker go -e -g 10M -p 2 Js Qc - 2s Th 5h

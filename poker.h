@@ -2,7 +2,6 @@
 #ifndef POKER_H_INCLUDED
 #define POKER_H_INCLUDED
 
-#include <array>
 #include <cstdint>
 #include <iostream>
 #include <string>
@@ -17,6 +16,7 @@ enum Card : unsigned { INVALID = 13 };
 
 constexpr int PLAYERS_NB = 9;
 constexpr int HOLE_NB    = 2;
+constexpr int MAX_RANGE  = 1 << 9;
 
 // Bitboards representing ranks/rows
 constexpr uint64_t Rank1BB = 0xFFFFULL << (16 * 0);
@@ -47,21 +47,17 @@ constexpr uint32_t IsFlush   =   8 | (8 << 4) | (8 << 8) | (8 << 12);
 
 struct Hand {
 
-    const Card* range;
     uint64_t score;
     uint64_t cards;
     uint32_t suits;
 
     friend std::ostream& operator<<(std::ostream&, const Hand&);
 
-    bool add(Card c, uint64_t all)
+    bool add(Card c, uint64_t allMask)
     {
-        if (range)
-            c = range[c];
-
         uint64_t n = 1ULL << c;
 
-        if ((cards | all) & n) // Double card or invalid
+        if ((cards | allMask) & n) // Double card or invalid
             return false;
 
         cards |= n;
@@ -78,8 +74,6 @@ struct Hand {
 
     void merge(const Hand& holes)
     {
-        range = holes.range;
-
         if ((score & holes.score) == 0) { // Common case
             score |= holes.score;
             cards |= holes.cards;
@@ -130,26 +124,24 @@ struct Hand {
 
 class Spot {
 
-    typedef std::array<Hand, 1024> Range;
-
+    Hand combos[PLAYERS_NB][MAX_RANGE];
+    int combosId[PLAYERS_NB + 1];
     int missingHolesId[PLAYERS_NB * HOLE_NB + 1];
-    size_t givenRangeSizes[PLAYERS_NB];
     Hand givenHoles[PLAYERS_NB];
     Hand hands[PLAYERS_NB];
     Hand givenCommon;
-    std::vector<Range> ranges;
 
     PRNG* prng;
     unsigned numPlayers;
     unsigned missingCommons;
     uint32_t enumMask;
-    uint64_t allMask;
+    uint64_t givenAllMask;
     bool ready;
 
     void enumerate(std::vector<uint64_t>& enumBuf, unsigned missing,
                    uint64_t cards, int limit, unsigned missingHoles,
                    size_t idx, size_t threadsNum);
-    bool parse_range(const std::string& token);
+    bool parse_range(const std::string& token, int player);
 
 public:
     Spot() = default;
