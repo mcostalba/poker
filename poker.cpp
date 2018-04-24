@@ -11,17 +11,22 @@
 
 using namespace std;
 
+namespace {
+
+const string Values = "23456789TJQKA";
+const string Suites = "dhcs";
+const string SO = "so";
+
 // Needed by std::set, not to compare scores!
-static bool operator<(const Hand& h1, const Hand& h2)
+auto key_compare = [](const Hand& h1, const Hand& h2)
 {
     return h1.cards < h2.cards;
-}
+};
+typedef std::set<Hand, decltype(key_compare)> HandSet;
 
 // Parse a string token with one or more consecutive cards into a Hand
-static bool parse_cards(const string& token, Hand& h, Hand& all, unsigned max)
+bool parse_cards(const string& token, Hand& h, Hand& all, unsigned max)
 {
-    const string Values = "23456789TJQKA";
-    const string Suites = "dhcs";
     size_t v, c;
 
     // Should be even number of chars (2 per card) and not exceeding the max
@@ -49,13 +54,9 @@ static bool parse_cards(const string& token, Hand& h, Hand& all, unsigned max)
 
 // Expand tokens like T6s+, 88+, 52o+, AA, AK, QQ-99, T7s-T3s, J8-52 in the
 // group of corresponding pair of cards (combos).
-static bool expand(const string& token, set<Hand>& ranges)
+bool expand(const string& token, HandSet& ranges)
 {
     enum SuitFilter { AnySuit, Suited, Offsuited };
-
-    const string Values = "23456789TJQKA";
-    const string Suites = "dhcs";
-    const string SO = "so";
 
     size_t v1, v2, v3 = string::npos, v4 = string::npos;
     SuitFilter f = AnySuit, f2 = AnySuit;
@@ -139,6 +140,8 @@ static bool expand(const string& token, set<Hand>& ranges)
     return true;
 }
 
+} // namespace
+
 // Parse a string token with a list of ranges like '[AK,88+,76s+]' or a single
 // one like 'QQ+' into a set of hands, each one of 2 hole cards.
 bool Spot::parse_range(const string& token, int player)
@@ -149,7 +152,7 @@ bool Spot::parse_range(const string& token, int player)
         return false;
 
     string combo;
-    set<Hand> handSet; // Use a set to avoid duplicates
+    HandSet handSet(key_compare); // Use a set to avoid duplicates
     size_t cnt = 0;
     stringstream ss(hasBrackets ? token.substr(1, token.size() - 2) : token);
 
@@ -167,7 +170,7 @@ bool Spot::parse_range(const string& token, int player)
             combos[player][cnt++] = h;
 
     // Fill remaining with an invalid hand so that (invalid & allMask) is true
-    Hand invalid;
+    Hand invalid = Hand();
     invalid.cards = ~uint64_t(0);
     while (cnt < MAX_RANGE)
         combos[player][cnt++] = invalid;
@@ -190,7 +193,6 @@ Spot::Spot(const std::string& pos)
     stringstream ss(pos);
 
     memset(givenHoles, 0, sizeof(givenHoles));
-    memset(hands, 0, sizeof(hands));
 
     givenCommon = Hand();
     givenCommon.suits = SuitInit; // Only givenCommon is set with SuitInit
@@ -208,33 +210,34 @@ Spot::Spot(const std::string& pos)
     if (numPlayers < 2 || numPlayers > 9)
         return;
 
-    // First hole cards. One token per player, up to 2 cards per token
+    // First hole cards, one token per player. Token can be single card, double
+    // card, range or range list. The latter between square brackets [].
     int n = -1, *mi = missingHolesId, *ci = combosId;
     while (ss >> token && token != "-") {
-        if (!parse_cards(token, givenHoles[++n], all, 2)
+        if (   !parse_cards(token, givenHoles[++n], all, 2)
             && !parse_range(token, n))
             return;
 
-        // In case of a range givenHoles[n] remains empty
-        if (!givenHoles[n].cards)
-            *ci++ = n;
-
         // Add to missingHolesId[] the hole's index for the missing card
         // and update enumMask setting this hole's group boundary.
-        if (givenHoles[n].cards && popcount(givenHoles[n].cards) < 2) {
+        if (popcount(givenHoles[n].cards) == 1) {
             *mi++ = n;
             enumMask = (enumMask << 1) | 1;
         }
+        // In case of a range givenHoles[n] remains empty, so add to combosId[]
+        // the range index to pick from at simulation time.
+        else if (!givenHoles[n].cards)
+            *ci++ = n;
     }
-    // Populate missingHolesId[] and enumMask for the missing hole card
-    // pairs up to the number of given players.
+    // Populate missingHolesId[] and enumMask for the missing hole card pairs
+    // up to the number of given players.
     for (int i = n + 1; i < int(numPlayers); ++i) {
         *mi++ = i, *mi++ = i;
         enumMask = (enumMask << 2) | 2;
     }
     *mi = -1, *ci = -1; // Set EOF
 
-    // Then remaining common cards up to 5 (or 7 in case of a fixed hand)
+    // Then remaining common cards up to 5
     while (ss >> token)
         if (!parse_cards(token, givenCommon, all, 5))
             return;
@@ -253,6 +256,7 @@ Spot::Spot(const std::string& pos)
 /// hands and find the max among them.
 void Spot::run(Result results[])
 {
+    Hand hands[PLAYERS_NB];
     unsigned maxId = 0, split = 0;
     uint64_t maxScore = 0;
     Hand common = givenCommon;
@@ -272,7 +276,7 @@ void Spot::run(Result results[])
         }
     }
 
-    // Then build the common board
+    // Then complete the common 5-card board
     unsigned cnt = missingCommons;
     while (cnt) {
         uint64_t n = prng->next();

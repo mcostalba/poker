@@ -128,7 +128,6 @@ class Spot {
     int combosId[PLAYERS_NB + 1];
     int missingHolesId[PLAYERS_NB * HOLE_NB + 1];
     Hand givenHoles[PLAYERS_NB];
-    Hand hands[PLAYERS_NB];
     Hand givenCommon;
 
     PRNG* prng;
