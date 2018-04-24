@@ -181,10 +181,8 @@ bool Spot::parse_range(const string& token, int player)
 /// Initialize a Spot from a given string like:
 ///
 ///  4P AcTc TdTh - 5h 6h 9c
-///  1P Ac Tc Td Th 5h 6h 9c
+///  3P [AA,QQ-99,AKs,T7s-T3s,AKo] [88+,T6s+,52o+] TT+
 ///
-/// First is 4 players, first 2 with AcTc and TdTh and with board cards 5h 6h 9c.
-/// Second is a 7-card hand evaluation.
 Spot::Spot(const std::string& pos)
 {
     Hand all = Hand();
@@ -207,57 +205,44 @@ Spot::Spot(const std::string& pos)
         return;
 
     numPlayers = token[0] - '0';
-    if (numPlayers < 1 || numPlayers > 9)
+    if (numPlayers < 2 || numPlayers > 9)
         return;
 
-    // In case of a 7 cards fixed hand evaluation players are set to 1
-    bool fixedHand = (numPlayers == 1);
-
     // First hole cards. One token per player, up to 2 cards per token
-    if (!fixedHand) {
-        int n = -1, *mi = missingHolesId, *ci = combosId;
-        while (ss >> token && token != "-") {
-            if (   !parse_cards(token, givenHoles[++n], all, 2)
-                && !parse_range(token, n))
-                return;
+    int n = -1, *mi = missingHolesId, *ci = combosId;
+    while (ss >> token && token != "-") {
+        if (!parse_cards(token, givenHoles[++n], all, 2)
+            && !parse_range(token, n))
+            return;
 
-            // In case of a range givenHoles[n] remains empty
-            if (!givenHoles[n].cards)
-                *ci++ = n;
+        // In case of a range givenHoles[n] remains empty
+        if (!givenHoles[n].cards)
+            *ci++ = n;
 
-            // Add to missingHolesId[] the hole's index for the missing card
-            // and update enumMask setting this hole's group boundary.
-            if (givenHoles[n].cards && popcount(givenHoles[n].cards) < 2) {
-                *mi++ = n;
-                enumMask = (enumMask << 1) | 1;
-            }
+        // Add to missingHolesId[] the hole's index for the missing card
+        // and update enumMask setting this hole's group boundary.
+        if (givenHoles[n].cards && popcount(givenHoles[n].cards) < 2) {
+            *mi++ = n;
+            enumMask = (enumMask << 1) | 1;
         }
-        // Populate missingHolesId[] and enumMask for the missing hole card
-        // pairs up to the number of given players.
-        for (int i = n + 1; i < int(numPlayers); ++i) {
-            *mi++ = i, *mi++ = i;
-            enumMask = (enumMask << 2) | 2;
-        }
-        *mi = -1, *ci = -1; // Set EOF
     }
+    // Populate missingHolesId[] and enumMask for the missing hole card
+    // pairs up to the number of given players.
+    for (int i = n + 1; i < int(numPlayers); ++i) {
+        *mi++ = i, *mi++ = i;
+        enumMask = (enumMask << 2) | 2;
+    }
+    *mi = -1, *ci = -1; // Set EOF
 
     // Then remaining common cards up to 5 (or 7 in case of a fixed hand)
     while (ss >> token)
-        if (!parse_cards(token, givenCommon, all, fixedHand ? 7 : 5))
+        if (!parse_cards(token, givenCommon, all, 5))
             return;
 
-    if (fixedHand) {
-        if (popcount(givenCommon.cards) != 7)
-            return;
-
-        missingCommons = enumMask = 0;
-        givenCommon.do_score(); // Single position evaluation
-    } else {
-        missingCommons = 5 - popcount(givenCommon.cards);
-        if (missingCommons) {
-            unsigned v = 1 << (missingCommons - 1);
-            enumMask = (enumMask << missingCommons) | v;
-        }
+    missingCommons = 5 - popcount(givenCommon.cards);
+    if (missingCommons) {
+        unsigned v = 1 << (missingCommons - 1);
+        enumMask = (enumMask << missingCommons) | v;
     }
     givenAllMask = all.cards | FlagsArea;
     ready = true;

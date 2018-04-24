@@ -9,14 +9,10 @@
 
 using namespace std;
 
-static string parse_args(istringstream& is, size_t& players,
-    size_t& gamesNum, size_t& threadsNum, bool& enumerate)
+static string parse_args(istringstream& is, size_t& players, size_t& gamesNum,
+                         size_t& threadsNum, bool& enumerate)
 {
-    enum States {
-        Option,
-        Hole,
-        Common
-    };
+    enum States { Option, Hole, Common };
 
     map<string, string> args;
     string token, value, sep = " ";
@@ -75,8 +71,7 @@ static string parse_args(istringstream& is, size_t& players,
     } else
         gamesNum = 1000 * 1000;
 
-    sep = (players == 1 ? "" : "- ");
-    return to_string(players) + "P " + args["holes"] + sep + args["commons"];
+    return to_string(players) + "P " + args["holes"] + "- " + args["commons"];
 }
 
 void go(istringstream& is)
@@ -95,22 +90,6 @@ void go(istringstream& is)
     memset(results, 0, sizeof(results));
     run(s, gamesNum, threadsNum, enumerate, results);
     pretty_results(results, players);
-}
-
-void eval(istringstream& is)
-{
-    size_t players = 1, gamesNum, threadsNum;
-    bool enumerate;
-    string pos = parse_args(is, players, gamesNum, threadsNum, enumerate);
-
-    Spot s(pos);
-    if (players != 1 || !s.valid()) {
-        cerr << "Error in: " << pos << endl;
-        return;
-    }
-
-    cout << "Score is: " << s.eval() << "\n"
-         << pretty64(s.eval(), false) << endl;
 }
 
 int main(int argc, char* argv[])
@@ -135,8 +114,6 @@ int main(int argc, char* argv[])
             break;
         else if (token == "go")
             go(is);
-        else if (token == "eval")
-            eval(is);
         else if (token == "bench")
             bench(is);
         else
