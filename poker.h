@@ -18,6 +18,8 @@ constexpr int PLAYERS_NB = 9;
 constexpr int HOLE_NB    = 2;
 constexpr int MAX_RANGE  = 1 << 9;
 
+constexpr uint64_t COMBO_EOF = ~uint64_t(0); // (COMBO_EOF & allMask) is always true
+
 // Bitboards representing ranks/rows
 constexpr uint64_t Rank1BB = 0xFFFFULL << (16 * 0);
 constexpr uint64_t Rank2BB = 0xFFFFULL << (16 * 1);
@@ -134,12 +136,13 @@ class Spot {
     unsigned numPlayers;
     unsigned missingCommons;
     uint32_t enumMask;
+    uint32_t rangeMask;
     uint64_t givenAllMask;
     bool ready;
 
     void enumerate(std::vector<uint64_t>& enumBuf, unsigned missing,
-                   uint64_t cards, int limit, unsigned missingHoles,
-                   size_t idx, size_t threadsNum);
+                   uint64_t cards, uint64_t comboSeq, int limit,
+                   unsigned missingHoles, size_t idx, size_t threadsNum);
     bool parse_range(const std::string& token, int player);
 
 public:

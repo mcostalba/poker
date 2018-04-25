@@ -18,8 +18,7 @@ const string Suites = "dhcs";
 const string SO = "so";
 
 // Needed by std::set, not to compare scores!
-auto key_compare = [](const Hand& h1, const Hand& h2)
-{
+auto key_compare = [](const Hand& h1, const Hand& h2) {
     return h1.cards < h2.cards;
 };
 typedef std::set<Hand, decltype(key_compare)> HandSet;
@@ -169,9 +168,9 @@ bool Spot::parse_range(const string& token, int player)
         for (const Hand& h : handSet)
             combos[player][cnt++] = h;
 
-    // Fill remaining with an invalid hand so that (invalid & allMask) is true
+    // Fill remaining entries with COMBO_EOF
     Hand invalid = Hand();
-    invalid.cards = ~uint64_t(0);
+    invalid.cards = COMBO_EOF;
     while (cnt < MAX_RANGE)
         combos[player][cnt++] = invalid;
 
@@ -197,7 +196,7 @@ Spot::Spot(const std::string& pos)
     givenCommon = Hand();
     givenCommon.suits = SuitInit; // Only givenCommon is set with SuitInit
     prng = nullptr;
-    enumMask = 0;
+    enumMask = rangeMask = 0;
     ready = false;
 
     ss >> skipws >> token;
@@ -223,17 +222,22 @@ Spot::Spot(const std::string& pos)
         if (popcount(givenHoles[n].cards) == 1) {
             *mi++ = n;
             enumMask = (enumMask << 1) | 1;
+            rangeMask <<= 1;
         }
         // In case of a range givenHoles[n] remains empty, so add to combosId[]
         // the range index to pick from at simulation time.
-        else if (!givenHoles[n].cards)
+        else if (!givenHoles[n].cards) {
             *ci++ = n;
+            enumMask  = (enumMask  << 2) | 2;
+            rangeMask = (rangeMask << 2) | 2;
+        }
     }
     // Populate missingHolesId[] and enumMask for the missing hole card pairs
     // up to the number of given players.
     for (int i = n + 1; i < int(numPlayers); ++i) {
         *mi++ = i, *mi++ = i;
         enumMask = (enumMask << 2) | 2;
+        rangeMask <<= 2;
     }
     *mi = -1, *ci = -1; // Set EOF
 
@@ -246,6 +250,7 @@ Spot::Spot(const std::string& pos)
     if (missingCommons) {
         unsigned v = 1 << (missingCommons - 1);
         enumMask = (enumMask << missingCommons) | v;
+        rangeMask <<= missingCommons;
     }
     givenAllMask = all.cards | FlagsArea;
     ready = true;
@@ -325,12 +330,33 @@ void Spot::run(Result results[])
 /// uint64_t (that can pack up to 10 cards) for the missing commons cards and
 /// one for the missing hole cards.
 void Spot::enumerate(std::vector<uint64_t>& buf, unsigned missing,
-                     uint64_t cards, int limit, unsigned missingHoles,
-                     size_t idx, size_t threadsNum)
+                     uint64_t cards, uint64_t comboSeq, int limit,
+                     unsigned missingHoles, size_t idx, size_t threadsNum)
 {
+    Hand* cmb = nullptr;
+    unsigned shift = 0;
+
     // At group boundaries enumMask is 1. We reset to 64 in this case
-    unsigned end = (enumMask & (1 << (missing - 1))) ? 64 : limit;
-    cards <<= 6;
+    uint32_t groupBoundary = enumMask & (1 << (missing - 1));
+    unsigned end = groupBoundary ? 64 : limit;
+
+    // Check if this new group is also a range and in this case get the
+    // corresponding combo vector.
+    if (groupBoundary & rangeMask) {
+        // Count how many ranges there are before this one
+        int cnt = popcount(rangeMask & ~(groupBoundary - 1)) - 1;
+
+        assert(cnt >= 0 && combosId[cnt] != -1);
+
+        cmb = combos[combosId[cnt]];
+        shift = 9 * cnt;
+
+        // Look for the range's end of the first replication
+        for (end = 1; end < MAX_RANGE; ++end)
+            if (cmb[end].cards == cmb[0].cards || cmb[end].cards == COMBO_EOF)
+                break;
+    } else
+        cards <<= 6; // Normal missing card
 
     for (unsigned c = 0; c < end; ++c) {
 
@@ -338,14 +364,20 @@ void Spot::enumerate(std::vector<uint64_t>& buf, unsigned missing,
         if (threadsNum && idx != (c % threadsNum))
             continue;
 
-        uint64_t n = 1ULL << c;
+        uint64_t n = cmb ? cmb[c].cards : 1ULL << c;
 
-        if (givenAllMask & n) // FIXME not compatible with ranges
+        if (givenAllMask & n)
             continue;
 
-        cards += c; // Append the new card
+        if (cmb)
+            comboSeq += (c << shift); // Prepend the new combo index
+        else
+            cards += c; // Append the new card
 
-        if (missing == 1) {
+        if (missing == (cmb ? 2 : 1)) {
+            if (rangeMask)
+                buf.push_back(comboSeq);
+
             if (missingCommons) {
                 unsigned mask = (1 << (6 * missingCommons)) - 1;
                 buf.push_back(cards & mask);
@@ -354,10 +386,14 @@ void Spot::enumerate(std::vector<uint64_t>& buf, unsigned missing,
                 buf.push_back(cards >> (6 * missingCommons));
         } else {
             givenAllMask |= n;
-            enumerate(buf, missing - 1, cards, c, missingHoles, idx, 0);
+            enumerate(buf, missing - (cmb ? 2 : 1), cards, comboSeq, c, missingHoles, idx, 0);
             givenAllMask ^= n;
         }
-        cards -= c;
+
+        if (cmb)
+            comboSeq -= (c << shift);
+        else
+            cards -= c;
     }
 }
 
@@ -372,23 +408,23 @@ size_t Spot::set_enumerate(std::vector<uint64_t>& enumBuf,
 {
     unsigned given = popcount(givenAllMask & ~FlagsArea);
     unsigned missing = 5 + 2 * numPlayers - given;
-    unsigned missingHoles = missing - missingCommons;
+    unsigned missingHoles = missing - missingCommons - 2 * popcount(rangeMask);
+    unsigned limit = 5 + 3 * popcount(rangeMask) / 2;
 
     if (missing == 0)
         return 0;
 
-    if (missing > 5) {
-        cout << "Missing too many cards (" << missing << "), max is 5" << endl;
+    if (missing > limit) {
+        cout << "Missing too many cards" << endl;
         return 0;
     }
     enumBuf.clear();
-    enumerate(enumBuf, missing, 0, 64, missingHoles, idx, threadsNum);
+    enumerate(enumBuf, missing, 0, 0, 64, missingHoles, idx, threadsNum);
     size_t gamesNum = enumBuf.size();
 
-    // We have 2 entries (instead of 1) for a single game in enumBuf in case
-    // both some common and hole cards are missing.
-    if (missingCommons && missingHoles)
-        gamesNum /= 2;
+    // We have 2/3 entries (instead of 1) for a single game in enumBuf in case
+    // common and/or hole cards and/or ranges are missing.
+    gamesNum /= !!missingCommons + !!missingHoles + !!rangeMask;
 
     cout << "Evaluating " << gamesNum << " combinations..." << endl;
     return gamesNum;

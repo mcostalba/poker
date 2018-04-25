@@ -148,7 +148,7 @@ inline uint64_t msb_bb(uint64_t b)
 }
 
 /// Pretty printers of a uint64_t in "table of bits" format and of equity results
-extern const std::string pretty64(uint64_t b, bool headers);
+extern const std::string pretty64(uint64_t b, bool headers = false);
 extern void pretty_results(Result* results, size_t players);
 
 #endif // #ifndef UTIL_H_INCLUDED
