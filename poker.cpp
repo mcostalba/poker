@@ -330,15 +330,13 @@ void Spot::run(Result results[])
 /// uint64_t (that can pack up to 10 cards) for the missing commons cards and
 /// one for the missing hole cards.
 void Spot::enumerate(std::vector<uint64_t>& buf, unsigned missing,
-                     uint64_t cards, uint64_t comboSeq, int limit,
-                     unsigned missingHoles, size_t idx, size_t threadsNum)
+                     uint64_t rnd64[], int shift[], int limit,
+                     size_t idx, size_t threadsNum)
 {
-    Hand* cmb = nullptr;
-    unsigned shift = 0;
-
     // At group boundaries enumMask is 1. We reset to 64 in this case
     uint32_t groupBoundary = enumMask & (1 << (missing - 1));
     unsigned end = groupBoundary ? 64 : limit;
+    Hand* cmb = nullptr;
 
     // Check if this new group is also a range and in this case get the
     // corresponding combo vector.
@@ -349,14 +347,13 @@ void Spot::enumerate(std::vector<uint64_t>& buf, unsigned missing,
         assert(cnt >= 0 && combosId[cnt] != -1);
 
         cmb = combos[combosId[cnt]];
-        shift = 9 * cnt;
 
         // Look for the range's end of the first replication
         for (end = 1; end < MAX_RANGE; ++end)
             if (cmb[end].cards == cmb[0].cards || cmb[end].cards == COMBO_EOF)
                 break;
-    } else
-        cards <<= 6; // Normal missing card
+    }
+    shift[!!cmb] += (cmb ? 9 : 6);
 
     for (unsigned c = 0; c < end; ++c) {
 
@@ -369,32 +366,29 @@ void Spot::enumerate(std::vector<uint64_t>& buf, unsigned missing,
         if (givenAllMask & n)
             continue;
 
-        if (cmb)
-            comboSeq += (c << shift); // Prepend the new combo index
-        else
-            cards += c; // Append the new card
+        rnd64[!!cmb] += c << shift[!!cmb]; // Append the new card/index
 
         if (missing == (cmb ? 2 : 1)) {
             if (rangeMask)
-                buf.push_back(comboSeq);
+                buf.push_back(rnd64[1]);
 
-            if (missingCommons) {
-                unsigned mask = (1 << (6 * missingCommons)) - 1;
-                buf.push_back(cards & mask);
+            unsigned sh = shift[0] - 6 * (missingCommons - 1);
+
+            if (missingCommons)
+                buf.push_back(rnd64[0] >> sh);
+
+            if (sh > 0) { // We have some missing holes
+                unsigned mask = (1 << sh) - 1;
+                buf.push_back(rnd64[0] & mask);
             }
-            if (missingHoles)
-                buf.push_back(cards >> (6 * missingCommons));
         } else {
             givenAllMask |= n;
-            enumerate(buf, missing - (cmb ? 2 : 1), cards, comboSeq, c, missingHoles, idx, 0);
+            enumerate(buf, missing - (cmb ? 2 : 1), rnd64, shift, c, idx, 0);
             givenAllMask ^= n;
         }
-
-        if (cmb)
-            comboSeq -= (c << shift);
-        else
-            cards -= c;
+        rnd64[!!cmb] -= c << shift[!!cmb];
     }
+    shift[!!cmb] -= (cmb ? 9 : 6);
 }
 
 /// Setup to run a full enumeration instead of the Monte Carlo simulation. This
@@ -418,8 +412,10 @@ size_t Spot::set_enumerate(std::vector<uint64_t>& enumBuf,
         cout << "Missing too many cards" << endl;
         return 0;
     }
+    uint64_t rnd64[] = {0, 0};
+    int shift[] = {-6, -9}; // Skip first shift
     enumBuf.clear();
-    enumerate(enumBuf, missing, 0, 0, 64, missingHoles, idx, threadsNum);
+    enumerate(enumBuf, missing, rnd64, shift, 64, idx, threadsNum);
     size_t gamesNum = enumBuf.size();
 
     // We have 2/3 entries (instead of 1) for a single game in enumBuf in case

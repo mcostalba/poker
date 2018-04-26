@@ -141,8 +141,8 @@ class Spot {
     bool ready;
 
     void enumerate(std::vector<uint64_t>& enumBuf, unsigned missing,
-                   uint64_t cards, uint64_t comboSeq, int limit,
-                   unsigned missingHoles, size_t idx, size_t threadsNum);
+                   uint64_t rnd64[], int shifts[], int limit,
+                   size_t idx, size_t threadsNum);
     bool parse_range(const std::string& token, int player);
 
 public:
