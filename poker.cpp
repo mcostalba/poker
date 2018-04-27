@@ -185,29 +185,25 @@ bool Spot::parse_range(const string& token, int player)
 ///  4P AcTc TdTh - 5h 6h 9c
 ///  3P [AA,QQ-99,AKs,T7s-T3s,AKo] [88+,T6s+,52o+] TT+
 ///
-Spot::Spot(const std::string& pos)
+Spot::Spot(int playersNum, const std::string& pos)
 {
     Hand all = Hand();
     string token;
     stringstream ss(pos);
 
+    if (playersNum < 2 || playersNum > 9)
+        return;
+
     memset(givenHoles, 0, sizeof(givenHoles));
 
+    numPlayers = playersNum;
     givenCommon = Hand();
     givenCommon.suits = SuitInit; // Only givenCommon is set with SuitInit
     prng = nullptr;
     enumMask = rangeMask = 0;
     ready = false;
 
-    ss >> skipws >> token;
-
-    // Parse number of players
-    if (token.length() != 2 || tolower(token[1]) != 'p')
-        return;
-
-    numPlayers = token[0] - '0';
-    if (numPlayers < 2 || numPlayers > 9)
-        return;
+    ss >> skipws;
 
     // First hole cards, one token per player. Token can be single card, double
     // card, range or range list. The latter between square brackets [].

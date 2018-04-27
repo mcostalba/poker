@@ -25,9 +25,6 @@ public:
     void set_enum_buffer(uint64_t* b) { buf = b; }
 };
 
-/// bench() runs a benchmark for speed and signature
-void bench(std::istringstream& is);
-
 /// popcount() counts the number of non-zero bits in a uint64_t
 inline int popcount(uint64_t b)
 {

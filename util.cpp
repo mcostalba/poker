@@ -1,10 +1,8 @@
 #include <algorithm>
 #include <cassert>
-#include <chrono>
 #include <cstring>
 #include <iomanip>
 #include <iostream>
-#include <sstream>
 #include <thread>
 #include <vector>
 
@@ -20,40 +18,6 @@ using namespace std;
 uint64_t ScoreMask[4096];
 
 namespace {
-
-// Positions used by bench
-const vector<string> Defaults = {
-    "2P 3d",
-    "3P KhKs - Ac Ad 7c Ts Qs",
-    "4P AcTc TdTh - 5h 6h 9c",
-    "5P 2c3d KsTc AhTd - 4d 5d 9c 9d",
-    "6P Ac Ad KsKd 3c - 2c 2h 7c 7h 8c",
-    "7P Ad Kc QhJh 3s4s - 2c 2h 7c 5h 8c",
-    "8P - Ac Ah 3d 7h 8c",
-    "9P",
-    "4P AhAd AcTh 7c6s 2h3h - 2c 3c 4c",
-    "4P AhAd AcTh 7c6s 2h3h",
-};
-
-typedef chrono::milliseconds::rep TimePoint; // A value in milliseconds
-
-TimePoint now()
-{
-    return chrono::duration_cast<chrono::milliseconds>(
-        chrono::steady_clock::now().time_since_epoch())
-        .count();
-}
-
-// Quick hash, see https://stackoverflow.com/questions/13325125/
-// lightweight-8-byte-hash-function-algorithm
-struct Hash {
-
-    static const uint64_t Mulp = 2654435789;
-    uint64_t mix = 104395301;
-
-    void operator<<(unsigned v) { mix += (v * Mulp) ^ (mix >> 23); }
-    uint64_t get() { return mix ^ (mix << 37); }
-};
 
 class Thread {
 
@@ -300,50 +264,4 @@ void pretty_results(Result* results, size_t players)
              << std::setw(9) << results[p].first << " "
              << std::setw(9) << double(results[p].second) / KTie << endl;
     }
-}
-
-void bench(istringstream& is)
-{
-    constexpr uint64_t GoodSig = 11714201772365687243ULL;
-    constexpr int GamesNum = 1500 * 1000;
-
-    Result results[PLAYERS_NB];
-    string token;
-    Hash sig;
-    uint64_t cards = 0, spots = 0, cnt = 0;
-
-    int threadsNum = (is >> token) ? stoi(token) : 1;
-
-    TimePoint elapsed = now();
-
-    for (const string& v : Defaults) {
-        cerr << "\nPosition " << ++cnt << ": " << v << endl;
-        memset(results, 0, sizeof(results));
-        Spot s(v);
-        run(s, GamesNum, threadsNum, false, results);
-
-        for (size_t p = 0; p < s.players(); ++p)
-            sig << results[p].first + results[p].second;
-
-        pretty_results(results, s.players());
-
-        cards += GamesNum * (s.players() * 2 + 5);
-        spots += GamesNum;
-    }
-
-    elapsed = now() - elapsed + 1; // Ensure positivity to avoid a 'divide by zero'
-
-    cerr << "\n==========================="
-         << "\nTotal time   : " << elapsed << " msec"
-         << "\nSpots played : " << spots / 1000000 << "M"
-         << "\nCards/second : " << 1000 * cards / elapsed
-         << "\nGames/second : " << 1000 * spots / elapsed
-         << "\nSignature    : " << sig.get();
-
-    if (sig.get() == GoodSig)
-        cerr << " (OK)";
-    else if (threadsNum == 1)
-        cerr << " (FAIL)";
-
-    cerr << endl;
 }

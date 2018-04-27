@@ -147,7 +147,7 @@ class Spot {
 
 public:
     Spot() = default;
-    explicit Spot(const std::string& pos);
+    explicit Spot(int playersNum, const std::string& pos);
     void run(Result results[]);
     size_t set_enumerate(std::vector<uint64_t>&, size_t, size_t);
 
