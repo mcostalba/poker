@@ -29,7 +29,7 @@ public:
 inline int popcount(uint64_t b)
 {
 
-#ifndef USE_POPCNT
+#ifdef USE_POPCNT
 
     extern uint8_t PopCnt16[1 << 16];
     union {
